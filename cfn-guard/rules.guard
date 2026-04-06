@@ -1,0 +1,15 @@
+let s3_buckets = Resources.*[Type == 'AWS::S3::Bucket']
+let cognito_clients = Resources.*[Type == 'AWS::Cognito::UserPoolClient']
+let cloudfront_origin_access_identities = Resources.*[Type == 'AWS::CloudFront::CloudFrontOriginAccessIdentity']
+
+rule s3_bucket_encryption when %s3_buckets% {
+  Properties.BucketEncryption != absent
+}
+
+rule cognito_client_generate_secret_false when %cognito_clients% {
+  Properties.GenerateSecret == false
+}
+
+rule cloudfront_oai_has_comment when %cloudfront_origin_access_identities% {
+  Properties.CloudFrontOriginAccessIdentityConfig.Comment != absent
+}

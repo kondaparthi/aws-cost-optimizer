@@ -50,10 +50,6 @@ Parameters:
   DashboardS3Bucket:
     Type: String
     Description: S3 bucket for hosting the dashboard (must be unique globally)
-    
-  AdminEmail:
-    Type: String
-    Description: Email for Cognito admin user
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -335,6 +331,10 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Ref DashboardS3Bucket
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -385,7 +385,7 @@ Resources:
       GenerateSecret: false
       ExplicitAuthFlows:
         - ADMIN_NO_SRP_AUTH
-        - USER_SRP_AUTH
+        - ALLOW_USER_SRP_AUTH
       SupportedIdentityProviders:
         - COGNITO
 
@@ -490,9 +490,9 @@ Resources:
   # ========================================================================
   
   CloudFrontOriginAccessIdentity:
-    Type: AWS::CloudFront::OriginAccessIdentity
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
     Properties:
-      OriginAccessIdentityConfig:
+      CloudFrontOriginAccessIdentityConfig:
         Comment: !Sub "OAI for ${DashboardS3Bucket}"
 
   CloudFrontDistribution:
