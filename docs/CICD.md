@@ -330,13 +330,4 @@ aws cloudformation describe-stack-events \
 
 ---
 
-## Related Resources
-
-- **Deployment Instructions**: `docs/DEPLOYMENT.md`
-- **Architecture Reference**: `ARCHITECTURE.md`
-- **Configuration Guide**: `docs/CONFIG.md`
-- **GitHub Actions Documentation**: https://docs.github.com/actions
-
----
-
 **Automated, credential-free deployment infrastructure for continuous optimization.** 🔄
