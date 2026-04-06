@@ -1,5 +1,9 @@
 """
 Core configuration, logging, and AWS client utilities.
+
+Copyright (c) 2026 kondaparthi
+
+Licensed under the MIT License.
 """
 
 import json

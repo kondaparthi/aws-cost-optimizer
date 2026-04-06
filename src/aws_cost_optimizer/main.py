@@ -1,5 +1,9 @@
 """
 AWS Cost Optimizer - Main CLI entry point
+
+Copyright (c) 2026 kondaparthi
+
+Licensed under the MIT License.
 """
 
 import sys

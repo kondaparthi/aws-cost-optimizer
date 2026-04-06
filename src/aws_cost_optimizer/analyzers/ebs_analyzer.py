@@ -1,5 +1,9 @@
 """
 EBS Analyzer: Detect unattached volumes, old snapshots, and estimate cleanup costs.
+
+Copyright (c) 2026 kondaparthi
+
+Licensed under the MIT License.
 """
 
 from typing import Dict, Any

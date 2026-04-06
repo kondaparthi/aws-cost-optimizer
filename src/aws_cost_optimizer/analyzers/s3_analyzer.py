@@ -1,5 +1,9 @@
 """
 S3 Analyzer: Detect incomplete multipart uploads and lifecycle opportunities.
+
+Copyright (c) 2026 kondaparthi
+
+Licensed under the MIT License.
 """
 
 from typing import Dict, Any

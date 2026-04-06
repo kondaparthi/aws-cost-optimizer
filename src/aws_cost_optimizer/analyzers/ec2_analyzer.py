@@ -1,5 +1,9 @@
 """
 EC2 Analyzer: Detect idle instances, right-sizing opportunities, unused ASGs.
+
+Copyright (c) 2026 kondaparthi
+
+Licensed under the MIT License.
 """
 
 from typing import Dict, Any

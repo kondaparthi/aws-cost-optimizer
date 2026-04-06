@@ -1,5 +1,9 @@
 """
 Base analyzer and data models for all cost optimization modules.
+
+Copyright (c) 2026 kondaparthi
+
+Licensed under the MIT License.
 """
 
 import boto3
