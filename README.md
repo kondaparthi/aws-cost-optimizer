@@ -53,7 +53,7 @@ A **CloudFormation-deployed, fully automated AWS cost optimization system** that
 
 ---
 
-## Architecture
+## Enhanced Security Architecture 
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -189,6 +189,7 @@ Dashboard shows results
 ### Documentation
 - Architecture & design decisions
 - Deployment guide (step-by-step)
+- CI/CD integration guide
 - Configuration reference
 - Real-world examples
 - Troubleshooting guide
@@ -260,6 +261,37 @@ Usually **same month** - savings exceed deployment cost on day 1
 ---
 
 ## How It Works
+
+
+```
+┌─────────────────────────────────────────┐
+│  Config (YAML) + Skip Policies          │
+└──────────────────┬──────────────────────┘
+                   │
+┌──────────────────▼──────────────────────┐
+│  Multi-Account Orchestrator             │
+│  (STS assume-role per account)          │
+└──────────────────┬──────────────────────┘
+                   │
+         ┌─────────┼─────────┬──────────┐
+         │         │         │          │
+    ┌────▼──┐ ┌──▼────┐ ┌──▼────┐ ┌──▼─────┐
+    │  EBS  │ │  EC2  │ │  S3   │ │CloudWatch
+    │Analyzer│ │Analyzer│ │Analyzer│ │Analyzer
+    └────┬──┘ └──┬────┘ └──┬────┘ └──┬─────┘
+         │         │         │         │
+         └─────────┼─────────┼─────────┘
+                   │
+         ┌─────────▼──────────┐
+         │   Report Generator  │
+         │  JSON/CSV/HTML      │
+         └─────────┬───────────┘
+                   │
+           ┌───────▼────────┐
+           │  Output (S3)    │
+           │ or local /dir   │
+           └─────────────────┘
+```
 
 ### Step 1: Deploy
 ```bash
@@ -394,9 +426,32 @@ Dashboard shows findings from ALL accounts with regional breakdown.
 
 ---
 
+## Demo Dashboard
+
+Experience the cost optimizer with realistic synthetic data:
+
+![AWS Cost Optimizer Dashboard](dashboard/demo/dashboard-screenshot.png)
+
+```bash
+cd dashboard/demo
+python3 -m http.server 8000
+# Open http://localhost:8000/demo.html in your browser
+```
+
+The demo includes:
+- **28 realistic findings** across EBS, EC2, S3, RDS, and other AWS services
+- **Interactive decision-making** - mark resources to keep or remove
+- **Real cost calculations** with accurate AWS pricing
+- **Filtering and export** capabilities
+- **Sample user actions** showing realistic decision patterns
+
+Perfect for understanding the optimization workflow before production deployment.
+
+---
+
 ## 🤖AI Assistance
 
-AI tools (Claude) were used as a **productivity aid** for parts of the implementation.
+AI assistants (Claude & GitHub Copilot Chat) were used as a **productivity aid** for parts of the implementation.
 The end-to-end architecture, design integrity, and cost optimization framework reflect my hands-on experience building and optimizing AWS environments at scale.
 
 ---

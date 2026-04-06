@@ -1,0 +1,119 @@
+# AWS Cost Optimizer - Configuration Template
+# Copy to config/my-config.yaml and customize for your environment
+
+# ============================================================================
+# Regions to analyze
+# ============================================================================
+regions:
+  - us-east-1
+  - us-west-2
+  - eu-west-1
+
+# ============================================================================
+# Multi-account configuration
+# ============================================================================
+# Leave empty for single-account (uses local credentials)
+accounts:
+  # - id: "111111111111"
+  #   role_arn: "arn:aws:iam::111111111111:role/CostOptimizerRole"
+  #   name: "Production"
+  # 
+  # - id: "222222222222"
+  #   role_arn: "arn:aws:iam::222222222222:role/CostOptimizerRole"
+  #   name: "Staging"
+
+# ============================================================================
+# Tag-based skip policies
+# ============================================================================
+# Resources matching these tag conditions will NOT be analyzed/modified
+skip_policies:
+  # Skip all resources with Environment=prod tag
+  skip_if_tags_match:
+    Environment: prod
+
+  # OR: Skip if any of these tags are present
+  skip_if_any_tag:
+    - DoNotOptimize
+    - ManagedByTerraform
+
+# ============================================================================
+# Analyzer-specific thresholds and config
+# ============================================================================
+thresholds:
+  # EBS
+  ebs:
+    unattached_days: 7          # Alert if volume unattached for N days
+    snapshot_age_days: 90        # Alert if snapshot older than N days
+
+  # EC2
+  ec2:
+    idle_cpu_threshold: 5        # % CPU usage
+    idle_days: 7                 # Days of idle metrics to check
+    idle_memory_threshold: 10    # % memory (if available)
+
+  # S3
+  s3:
+    check_incomplete_multipart: true
+    multipart_age_days: 7        # Alert if upload pending >N days
+    infrequent_access_days: 30   # Suggest storage class change if >N days old
+
+  # CloudWatch Logs
+  cloudwatch:
+    retention_threshold_days: 400  # Alert if retention >N days
+    daily_ingestion_gb: 1.0        # Alert if log group >N GB/day
+
+# ============================================================================
+# Scheduler configuration (EC2/EMR start-stop)
+# ============================================================================
+scheduler:
+  # Timezone for schedules (e.g., US/Eastern, UTC)
+  timezone: "US/Eastern"
+
+  # Named schedules referenced by instance tags
+  schedules:
+    # Stop at 6 PM Friday, resume at 8 AM Monday
+    off-hours:
+      stop_time: "18:00"
+      stop_days: [4, 5]  # Friday, Saturday
+      start_time: "08:00"
+      start_days: [0, 1, 2, 3, 4]  # Mon-Fri
+
+    # Stop at 6 PM every day, resume at 8 AM
+    business-hours:
+      stop_time: "18:00"
+      start_time: "08:00"
+      stop_days: [5, 6]  # Sat, Sun only
+      start_days: [0, 1, 2, 3, 4]  # Mon-Fri
+
+    # Always off (useful for dev/test)
+    always-off:
+      stop_time: "00:00"
+      stop_days: [0, 1, 2, 3, 4, 5, 6]
+      start_time: "23:59"
+      start_days: []
+
+  # Default schedule if not specified on instance
+  default: "off-hours"
+
+# ============================================================================
+# Output configuration
+# ============================================================================
+output:
+  # Directory for reports
+  directory: "./reports"
+  
+  # Formats to generate (json, csv, html)
+  formats:
+    - json
+    - html
+  
+  # Include detailed details in reports (may be large)
+  include_details: true
+
+# ============================================================================
+# Logging configuration
+# ============================================================================
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  # Optional: log to file
+  # file: "./logs/cost-optimizer.log"

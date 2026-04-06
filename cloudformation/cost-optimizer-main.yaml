@@ -1,0 +1,600 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS Cost Optimizer Framework - Complete deployment with Lambdas, EventBridge, and monitoring'
+
+Parameters:
+  ConfigS3Bucket:
+    Type: String
+    Description: S3 bucket containing cost-optimizer config.yaml
+    
+  ConfigS3Key:
+    Type: String
+    Default: config/cost-optimizer.yaml
+    Description: S3 key for config.yaml file
+  
+  ReportS3Bucket:
+    Type: String
+    Description: S3 bucket for storing analysis reports
+  
+  ReportS3Prefix:
+    Type: String
+    Default: cost-reports/
+    Description: S3 prefix for reports (e.g., cost-reports/)
+  
+  NotificationEmail:
+    Type: String
+    Description: Email address for SNS notifications
+    
+  AnalysisSchedule:
+    Type: String
+    Default: cron(0 2 * * ? *)
+    Description: EventBridge cron schedule for analysis (default 2 AM UTC daily)
+  
+  SchedulerSchedule:
+    Type: String
+    Default: cron(0 6,18 * * ? *)
+    Description: EventBridge cron schedule for scheduler (default 6 AM and 6 PM UTC)
+  
+  LambdaTimeout:
+    Type: Number
+    Default: 900
+    MinValue: 30
+    MaxValue: 900
+    Description: Lambda timeout in seconds
+  
+  LambdaMemory:
+    Type: Number
+    Default: 512
+    AllowedValues: [128, 256, 512, 1024, 1536, 2048]
+    Description: Lambda memory allocation in MB
+
+  DashboardS3Bucket:
+    Type: String
+    Description: S3 bucket for hosting the dashboard (must be unique globally)
+    
+  AdminEmail:
+    Type: String
+    Description: Email for Cognito admin user
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: S3 Configuration
+        Parameters:
+          - ConfigS3Bucket
+          - ConfigS3Key
+          - ReportS3Bucket
+          - ReportS3Prefix
+      - Label:
+          default: Notifications
+        Parameters:
+          - NotificationEmail
+      - Label:
+          default: Schedules
+        Parameters:
+          - AnalysisSchedule
+          - SchedulerSchedule
+      - Label:
+          default: Lambda Configuration
+        Parameters:
+          - LambdaTimeout
+          - LambdaMemory
+
+Resources:
+  # ========================================================================
+  # SNS Topic for Notifications
+  # ========================================================================
+  
+  CostOptimizerTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: AWS Cost Optimizer Notifications
+      TopicName: aws-cost-optimizer-notifications
+      Subscription:
+        - Endpoint: !Ref NotificationEmail
+          Protocol: email
+
+  # ========================================================================
+  # IAM Roles for Lambdas
+  # ========================================================================
+  
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cost-optimizer-lambda-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CostOptimizerPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # S3 access for config and reports
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  - !Sub "arn:aws:s3:::${ConfigS3Bucket}/*"
+                  - !Sub "arn:aws:s3:::${ReportS3Bucket}/*"
+              
+              # EC2 read access for analysis
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeVolumes
+                  - ec2:DescribeSnapshots
+                  - ec2:DescribeInstances
+                  - ec2:DescribeInstanceStatus
+                  - cloudwatch:GetMetricStatistics
+                  - cloudwatch:DescribeLogGroups
+                Resource: "*"
+              
+              # EC2 start/stop for scheduler
+              - Effect: Allow
+                Action:
+                  - ec2:StartInstances
+                  - ec2:StopInstances
+                Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:instance/*"
+              
+              # SNS for notifications
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !GetAtt CostOptimizerTopic.TopicArn
+              
+              # Systems Manager Parameter Store (optional for config)
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource: !Sub "arn:aws:ssm:*:${AWS::AccountId}:parameter/cost-optimizer/*"
+              
+              # Cross-account role assumption (for multi-account)
+              - Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource: "arn:aws:iam::*:role/CostOptimizerRole"
+
+  # ========================================================================
+  # Lambda Layer with Framework Code
+  # ========================================================================
+  
+  # Note: In production, build this as part of CI/CD
+  # For now, we reference the framework code included in Lambda function
+  
+  # ========================================================================
+  # Lambda: Cost Analysis (nightly)
+  # ========================================================================
+  
+  AnalysisLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: cost-optimizer-analysis
+      Runtime: python3.11
+      Handler: aws_cost_optimizer.lambda.analysis_handler.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: !Ref LambdaTimeout
+      MemorySize: !Ref LambdaMemory
+      Environment:
+        Variables:
+          CONFIG_S3_BUCKET: !Ref ConfigS3Bucket
+          CONFIG_S3_KEY: !Ref ConfigS3Key
+          REPORT_S3_BUCKET: !Ref ReportS3Bucket
+          REPORT_S3_PREFIX: !Ref ReportS3Prefix
+          SNS_TOPIC_ARN: !GetAtt CostOptimizerTopic.TopicArn
+          DRY_RUN: "false"
+      Code:
+        ZipFile: |
+          # Placeholder: Will be replaced with actual code during deployment
+          def lambda_handler(event, context):
+              return {"statusCode": 500, "body": "Placeholder"}
+      Tags:
+        - Key: Application
+          Value: CostOptimizer
+        - Key: Component
+          Value: Analysis
+
+  # ========================================================================
+  # Lambda: EC2/EMR Scheduler
+  # ========================================================================
+  
+  SchedulerLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: cost-optimizer-scheduler
+      Runtime: python3.11
+      Handler: aws_cost_optimizer.lambda.scheduler_handler.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: !Ref LambdaTimeout
+      MemorySize: !Ref LambdaMemory
+      Environment:
+        Variables:
+          TIMEZONE: UTC
+          DRY_RUN: "false"
+          SNS_TOPIC_ARN: !GetAtt CostOptimizerTopic.TopicArn
+      Code:
+        ZipFile: |
+          # Placeholder: Will be replaced with actual code during deployment
+          def lambda_handler(event, context):
+              return {"statusCode": 500, "body": "Placeholder"}
+      Tags:
+        - Key: Application
+          Value: CostOptimizer
+        - Key: Component
+          Value: Scheduler
+
+  # ========================================================================
+  # EventBridge Rules
+  # ========================================================================
+  
+  AnalysisEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: cost-optimizer-analysis-schedule
+      Description: Trigger cost analysis on schedule
+      ScheduleExpression: !Ref AnalysisSchedule
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt AnalysisLambdaFunction.Arn
+          Id: CostOptimizerAnalysisTarget
+
+  AnalysisEventPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AnalysisLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt AnalysisEventRule.Arn
+
+  SchedulerEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: cost-optimizer-scheduler
+      Description: Trigger EC2/EMR scheduler on schedule
+      ScheduleExpression: !Ref SchedulerSchedule
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt SchedulerLambdaFunction.Arn
+          Id: CostOptimizerSchedulerTarget
+
+  SchedulerEventPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SchedulerLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt SchedulerEventRule.Arn
+
+  # ========================================================================
+  # CloudWatch Log Groups
+  # ========================================================================
+  
+  AnalysisLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/cost-optimizer-analysis
+      RetentionInDays: 30
+
+  SchedulerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/cost-optimizer-scheduler
+      RetentionInDays: 30
+
+  # ========================================================================
+  # CloudWatch Alarms
+  # ========================================================================
+  
+  AnalysisErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: CostOptimizer-Analysis-Errors
+      AlarmDescription: Alert if analysis Lambda has errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AnalysisLambdaFunction
+      AlarmActions:
+        - !GetAtt CostOptimizerTopic.TopicArn
+
+  SchedulerErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: CostOptimizer-Scheduler-Errors
+      AlarmDescription: Alert if scheduler Lambda has errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SchedulerLambdaFunction
+      AlarmActions:
+        - !GetAtt CostOptimizerTopic.TopicArn
+
+  # ========================================================================
+  # S3 Bucket for Dashboard
+  # ========================================================================
+  
+  DashboardBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref DashboardS3Bucket
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+
+  DashboardBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DashboardBucket
+      PolicyDocument:
+        Statement:
+          - Sid: AllowCloudFrontAccess
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${CloudFrontOriginAccessIdentity}"
+            Action: s3:GetObject
+            Resource: !Sub "${DashboardBucket}/*"
+
+  # ========================================================================
+  # Cognito User Pool for Authentication
+  # ========================================================================
+  
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: cost-optimizer-dashboard-users
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      ClientName: cost-optimizer-dashboard-client
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ADMIN_NO_SRP_AUTH
+        - USER_SRP_AUTH
+      SupportedIdentityProviders:
+        - COGNITO
+
+  # ========================================================================
+  # Lambda@Edge for Authentication
+  # ========================================================================
+  
+  AuthEdgeLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: cost-optimizer-auth-check
+      Runtime: python3.11
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt LambdaEdgeExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import json
+          import base64
+          from urllib.parse import urlparse
+
+          def lambda_handler(event, context):
+              request = event['Records'][0]['cf']['request']
+              headers = request['headers']
+              
+              # Allow access to login page
+              if request['uri'] == '/login.html':
+                  return request
+              
+              # Check for auth cookie
+              cookies = headers.get('cookie', [{}])[0].get('value', '')
+              auth_cookie = None
+              
+              if cookies:
+                  for cookie in cookies.split(';'):
+                      cookie = cookie.strip()
+                      if cookie.startswith('auth='):
+                          auth_cookie = cookie.split('=', 1)[1]
+                          break
+              
+              if not auth_cookie:
+                  # Redirect to login
+                  return {
+                      'status': '302',
+                      'statusDescription': 'Found',
+                      'headers': {
+                          'location': [{
+                              'key': 'Location',
+                              'value': '/login.html'
+                          }],
+                          'cache-control': [{
+                              'key': 'Cache-Control',
+                              'value': 'no-cache, no-store, must-revalidate'
+                          }]
+                      }
+                  }
+              
+              # Validate auth cookie (Basic auth encoded)
+              try:
+                  auth_decoded = base64.b64decode(auth_cookie).decode('utf-8')
+                  username, password = auth_decoded.split(':')
+                  
+                  # Simple validation - in production, use Cognito JWT or secure store
+                  if username == 'admin' and password == 'CHANGE_THIS_PASSWORD':
+                      return request
+                  
+              except:
+                  pass
+              
+              # Invalid auth - redirect to login
+              return {
+                  'status': '302',
+                  'statusDescription': 'Found',
+                  'headers': {
+                          'location': [{
+                              'key': 'Location',
+                              'value': '/login.html'
+                          }],
+                          'cache-control': [{
+                              'key': 'Cache-Control',
+                              'value': 'no-cache, no-store, must-revalidate'
+                          }]
+                      }
+              }
+
+  LambdaEdgeExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cost-optimizer-edge-lambda-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+              AWS: arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity/*
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  # ========================================================================
+  # CloudFront Distribution for Secure Dashboard
+  # ========================================================================
+  
+  CloudFrontOriginAccessIdentity:
+    Type: AWS::CloudFront::OriginAccessIdentity
+    Properties:
+      OriginAccessIdentityConfig:
+        Comment: !Sub "OAI for ${DashboardS3Bucket}"
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: Cost Optimizer Dashboard
+        DefaultRootObject: index.html
+        Enabled: true
+        Origins:
+          - DomainName: !GetAtt DashboardBucket.RegionalDomainName
+            Id: S3Origin
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub "origin-access-identity/cloudfront/${CloudFrontOriginAccessIdentity}"
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+          LambdaFunctionAssociations:
+            - EventType: viewer-request
+              LambdaFunctionARN: !Ref AuthEdgeLambda
+        CacheBehaviors:
+          - PathPattern: login.html
+            TargetOriginId: S3Origin
+            ViewerProtocolPolicy: redirect-to-https
+            Compress: true
+            ForwardedValues:
+              QueryString: false
+              Cookies:
+                Forward: none
+        PriceClass: PriceClass_100
+        HttpVersion: http2
+
+Outputs:
+  AnalysisLambdaFunctionArn:
+    Description: ARN of analysis Lambda function
+    Value: !GetAtt AnalysisLambdaFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-AnalysisLambdaArn"
+
+  SchedulerLambdaFunctionArn:
+    Description: ARN of scheduler Lambda function
+    Value: !GetAtt SchedulerLambdaFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-SchedulerLambdaArn"
+
+  SNSTopicArn:
+    Description: ARN of SNS topic for notifications
+    Value: !GetAtt CostOptimizerTopic.TopicArn
+    Export:
+      Name: !Sub "${AWS::StackName}-SNSTopicArn"
+
+  AnalysisLogGroupName:
+    Description: CloudWatch Log Group for analysis Lambda
+    Value: !Ref AnalysisLogGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-AnalysisLogGroup"
+
+  SchedulerLogGroupName:
+    Description: CloudWatch Log Group for scheduler Lambda
+    Value: !Ref SchedulerLogGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-SchedulerLogGroup"
+
+  DashboardURL:
+    Description: Secure CloudFront URL for the dashboard
+    Value: !Sub "https://${CloudFrontDistribution.DomainName}"
+    Export:
+      Name: !Sub "${AWS::StackName}-DashboardURL"
+
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref CognitoUserPool
+    Export:
+      Name: !Sub "${AWS::StackName}-CognitoUserPoolId"
+
+  CognitoUserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref CognitoUserPoolClient
+    Export:
+      Name: !Sub "${AWS::StackName}-CognitoUserPoolClientId"
+
+  AnalysisSchedule:
+    Description: Analysis schedule (EventBridge cron)
+    Value: !Ref AnalysisSchedule
+
+  SchedulerSchedule:
+    Description: Scheduler schedule (EventBridge cron)
+    Value: !Ref SchedulerSchedule
+
+  ConfigLocation:
+    Description: S3 location of configuration file
+    Value: !Sub "s3://${ConfigS3Bucket}/${ConfigS3Key}"
+
+  ReportLocation:
+    Description: S3 location for reports
+    Value: !Sub "s3://${ReportS3Bucket}/${ReportS3Prefix}"
+
+  DeploymentInstructions:
+    Description: Next steps for deployment
+    Value: "1) Update Lambda code via CI/CD or 'aws lambda update-function-code'\n2) Configure config.yaml in S3\n3) Verify SNS subscription in email\n4) Monitor via CloudWatch Dashboard"

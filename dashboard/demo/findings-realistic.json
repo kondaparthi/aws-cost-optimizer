@@ -1,0 +1,566 @@
+{
+  "generated_at": "2026-04-05T10:15:00Z",
+  "summary": {
+    "total_findings": 28,
+    "potential_monthly_savings": 12450.75,
+    "potential_annual_savings": 149409.00
+  },
+  "findings": [
+    {
+      "id": "vol-0a1b2c3d4e5f6789a",
+      "type": "EBS Volume",
+      "issue": "Unattached gp3 volume for 127 days - 1TB storage",
+      "size_gb": 1024,
+      "cost_monthly": 102.40,
+      "cost_annual": 1228.80,
+      "severity": "high",
+      "action": "delete",
+      "tags": {
+        "Name": "web-server-data-vol",
+        "Environment": "development",
+        "Team": "platform-engineering",
+        "Project": "web-migration",
+        "CostCenter": "engineering"
+      },
+      "region": "us-east-1",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:ec2:us-east-1:123456789012:volume/vol-0a1b2c3d4e5f6789a"
+    },
+    {
+      "id": "vol-0f9e8d7c6b5a4321b",
+      "type": "EBS Volume",
+      "issue": "Unattached io2 volume for 89 days - 500GB high-performance storage",
+      "size_gb": 500,
+      "cost_monthly": 312.50,
+      "cost_annual": 3750.00,
+      "severity": "high",
+      "action": "delete",
+      "tags": {
+        "Name": "database-logs-vol",
+        "Environment": "staging",
+        "Application": "postgresql-cluster",
+        "Backup": "daily"
+      },
+      "region": "us-west-2",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:ec2:us-west-2:123456789012:volume/vol-0f9e8d7c6b5a4321b"
+    },
+    {
+      "id": "vol-0123456789abcdef0",
+      "type": "EBS Volume",
+      "issue": "Unattached magnetic volume for 45 days - 2TB legacy storage",
+      "size_gb": 2048,
+      "cost_monthly": 204.80,
+      "cost_annual": 2457.60,
+      "severity": "medium",
+      "action": "delete",
+      "tags": {
+        "Name": "old-archive-vol",
+        "Environment": "production",
+        "DataClassification": "archive",
+        "Retention": "7years"
+      },
+      "region": "eu-west-1",
+      "account_id": "987654321098",
+      "resource_arn": "arn:aws:ec2:eu-west-1:987654321098:volume/vol-0123456789abcdef0"
+    },
+    {
+      "id": "i-0abcd123456789ef0",
+      "type": "EC2 Instance",
+      "issue": "t3.xlarge instance idle for 21 days - CPU utilization <3%, network <1MB/day",
+      "instance_type": "t3.xlarge",
+      "cost_monthly": 167.52,
+      "cost_annual": 2010.24,
+      "severity": "high",
+      "action": "stop",
+      "tags": {
+        "Name": "dev-api-server-01",
+        "Environment": "development",
+        "Application": "api-gateway",
+        "Team": "backend-services",
+        "Owner": "john.doe@company.com"
+      },
+      "region": "us-east-1",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:ec2:us-east-1:123456789012:instance/i-0abcd123456789ef0"
+    },
+    {
+      "id": "i-0fedcba9876543210",
+      "type": "EC2 Instance",
+      "issue": "c5.4xlarge instance underutilized - CPU avg 15%, memory avg 25%, can downsize to c5.xlarge",
+      "instance_type": "c5.4xlarge",
+      "cost_monthly": 614.40,
+      "cost_annual": 7372.80,
+      "severity": "medium",
+      "action": "resize",
+      "tags": {
+        "Name": "prod-web-cluster-03",
+        "Environment": "production",
+        "Application": "web-frontend",
+        "AutoScalingGroup": "web-asg-prod",
+        "LoadBalancer": "prod-web-alb"
+      },
+      "region": "us-west-2",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:ec2:us-west-2:123456789012:instance/i-0fedcba9876543210"
+    },
+    {
+      "id": "i-0123456789abcdef1",
+      "type": "EC2 Instance",
+      "issue": "m5.2xlarge instance running outside business hours - stopped 6PM-8AM weekdays",
+      "instance_type": "m5.2xlarge",
+      "cost_monthly": 341.76,
+      "cost_annual": 4101.12,
+      "severity": "medium",
+      "action": "schedule",
+      "tags": {
+        "Name": "staging-etl-worker",
+        "Environment": "staging",
+        "Application": "data-pipeline",
+        "Schedule": "business-hours",
+        "Team": "data-engineering"
+      },
+      "region": "eu-west-1",
+      "account_id": "987654321098",
+      "resource_arn": "arn:aws:ec2:eu-west-1:987654321098:instance/i-0123456789abcdef1"
+    },
+    {
+      "id": "i-0aaaa111122223333",
+      "type": "EC2 Instance",
+      "issue": "r5.large instance with no active connections for 14 days - development database",
+      "instance_type": "r5.large",
+      "cost_monthly": 138.24,
+      "cost_annual": 1658.88,
+      "severity": "high",
+      "action": "stop",
+      "tags": {
+        "Name": "dev-postgres-db",
+        "Environment": "development",
+        "Application": "postgresql",
+        "Database": "user-data",
+        "Backup": "enabled"
+      },
+      "region": "ap-southeast-1",
+      "account_id": "555666777888",
+      "resource_arn": "arn:aws:ec2:ap-southeast-1:555666777888:instance/i-0aaaa111122223333"
+    },
+    {
+      "id": "asg-web-prod-001",
+      "type": "Auto Scaling Group",
+      "issue": "ASG with 0 running instances for 30+ days - production web tier",
+      "instance_type": "t3.medium",
+      "cost_monthly": 0.00,
+      "cost_annual": 0.00,
+      "severity": "low",
+      "action": "delete",
+      "tags": {
+        "Name": "web-asg-prod",
+        "Environment": "production",
+        "Application": "web-frontend",
+        "LoadBalancer": "prod-web-alb",
+        "LastUsed": "2026-02-15"
+      },
+      "region": "us-east-1",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:autoscaling:us-east-1:123456789012:autoScalingGroup:uuid:autoScalingGroupName/asg-web-prod-001"
+    },
+    {
+      "id": "my-company-prod-logs-2024",
+      "type": "S3 Bucket",
+      "issue": "S3 bucket with 2.3TB of CloudTrail logs, no lifecycle policy - $184/month storage",
+      "size_gb": 2355,
+      "cost_monthly": 184.00,
+      "cost_annual": 2208.00,
+      "severity": "medium",
+      "action": "lifecycle",
+      "tags": {
+        "Name": "prod-cloudtrail-logs",
+        "Environment": "production",
+        "Purpose": "audit-logs",
+        "Retention": "7years",
+        "Compliance": "required"
+      },
+      "region": "us-east-1",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:s3:::my-company-prod-logs-2024"
+    },
+    {
+      "id": "staging-app-backups",
+      "type": "S3 Bucket",
+      "issue": "S3 bucket with 890GB of staging backups, infrequent access - $45/month storage",
+      "size_gb": 890,
+      "cost_monthly": 45.00,
+      "cost_annual": 540.00,
+      "severity": "medium",
+      "action": "lifecycle",
+      "tags": {
+        "Name": "staging-backups",
+        "Environment": "staging",
+        "Purpose": "database-backups",
+        "Retention": "30days",
+        "Team": "platform"
+      },
+      "region": "us-west-2",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:s3:::staging-app-backups"
+    },
+    {
+      "id": "dev-multipart-uploads",
+      "type": "S3 Bucket",
+      "issue": "S3 bucket with 156GB of incomplete multipart uploads from failed transfers",
+      "size_gb": 156,
+      "cost_monthly": 7.80,
+      "cost_annual": 93.60,
+      "severity": "low",
+      "action": "cleanup",
+      "tags": {
+        "Name": "dev-uploads",
+        "Environment": "development",
+        "Purpose": "file-uploads",
+        "Team": "frontend"
+      },
+      "region": "eu-west-1",
+      "account_id": "987654321098",
+      "resource_arn": "arn:aws:s3:::dev-multipart-uploads"
+    },
+    {
+      "id": "prod-app-logs-group",
+      "type": "CloudWatch Logs",
+      "issue": "CloudWatch log group with 1.2TB data, retention set to 'never expire' - $96/month",
+      "size_gb": 1228,
+      "cost_monthly": 96.00,
+      "cost_annual": 1152.00,
+      "severity": "medium",
+      "action": "retention",
+      "tags": {
+        "Name": "/aws/lambda/prod-api-function",
+        "Environment": "production",
+        "Application": "api-service",
+        "LogType": "application"
+      },
+      "region": "us-east-1",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:logs:us-east-1:123456789012:log-group:/aws/lambda/prod-api-function:*"
+    },
+    {
+      "id": "staging-debug-logs",
+      "type": "CloudWatch Logs",
+      "issue": "CloudWatch log group with 340GB data, retention set to 1 year - $27/month",
+      "size_gb": 340,
+      "cost_monthly": 27.00,
+      "cost_annual": 324.00,
+      "severity": "low",
+      "action": "retention",
+      "tags": {
+        "Name": "/aws/ecs/staging-debug-service",
+        "Environment": "staging",
+        "Application": "debug-service",
+        "LogType": "debug"
+      },
+      "region": "us-west-2",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:logs:us-west-2:123456789012:log-group:/aws/ecs/staging-debug-service:*"
+    },
+    {
+      "id": "db.t3.medium-postgres-prod",
+      "type": "RDS Instance",
+      "issue": "db.t3.medium PostgreSQL instance with <5% CPU utilization for 30 days",
+      "instance_type": "db.t3.medium",
+      "cost_monthly": 92.16,
+      "cost_annual": 1105.92,
+      "severity": "high",
+      "action": "stop",
+      "tags": {
+        "Name": "prod-postgres-main",
+        "Environment": "production",
+        "Application": "user-database",
+        "Engine": "postgresql",
+        "Backup": "enabled"
+      },
+      "region": "us-east-1",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:rds:us-east-1:123456789012:db:prod-postgres-main"
+    },
+    {
+      "id": "db.r5.large-mysql-dev",
+      "type": "RDS Instance",
+      "issue": "db.r5.large MySQL instance with no active connections for 14 days",
+      "instance_type": "db.r5.large",
+      "cost_monthly": 184.32,
+      "cost_annual": 2211.84,
+      "severity": "high",
+      "action": "stop",
+      "tags": {
+        "Name": "dev-mysql-test",
+        "Environment": "development",
+        "Application": "test-database",
+        "Engine": "mysql",
+        "Team": "qa"
+      },
+      "region": "eu-west-1",
+      "account_id": "987654321098",
+      "resource_arn": "arn:aws:rds:eu-west-1:987654321098:db:dev-mysql-test"
+    },
+    {
+      "id": "nat-0abcd123456789ef0",
+      "type": "NAT Gateway",
+      "issue": "NAT Gateway with no data transfer for 45 days in private subnet",
+      "cost_monthly": 36.00,
+      "cost_annual": 432.00,
+      "severity": "high",
+      "action": "delete",
+      "tags": {
+        "Name": "nat-gateway-private-a",
+        "Environment": "staging",
+        "VPC": "staging-vpc",
+        "Subnet": "private-a",
+        "Purpose": "outbound-internet"
+      },
+      "region": "us-west-2",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:ec2:us-west-2:123456789012:natgateway/nat-0abcd123456789ef0"
+    },
+    {
+      "id": "elb-prod-web-alb",
+      "type": "ELB",
+      "issue": "Application Load Balancer with no active targets for 30 days",
+      "cost_monthly": 22.50,
+      "cost_annual": 270.00,
+      "severity": "medium",
+      "action": "delete",
+      "tags": {
+        "Name": "prod-web-alb",
+        "Environment": "production",
+        "Application": "web-frontend",
+        "Type": "application",
+        "LastUsed": "2026-02-20"
+      },
+      "region": "us-east-1",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/prod-web-alb/1234567890abcdef"
+    },
+    {
+      "id": "vol-snap-1234567890abcdef0",
+      "type": "EBS Snapshot",
+      "issue": "47 EBS snapshots older than 90 days from terminated instances - 15TB total",
+      "size_gb": 15360,
+      "cost_monthly": 153.60,
+      "cost_annual": 1843.20,
+      "severity": "medium",
+      "action": "cleanup",
+      "tags": {
+        "CreatedBy": "ec2-instance-termination",
+        "Environment": "mixed",
+        "Retention": "expired",
+        "CleanupCandidate": "true"
+      },
+      "region": "us-east-1",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:ec2:us-east-1:123456789012:snapshot/snap-1234567890abcdef0"
+    },
+    {
+      "id": "lambda-dev-unused-functions",
+      "type": "Lambda Function",
+      "issue": "5 Lambda functions with 0 invocations in last 60 days",
+      "cost_monthly": 0.00,
+      "cost_annual": 0.00,
+      "severity": "low",
+      "action": "delete",
+      "tags": {
+        "Name": "dev-experimental-functions",
+        "Environment": "development",
+        "Team": "platform",
+        "LastModified": "2026-01-15",
+        "Status": "deprecated"
+      },
+      "region": "us-west-2",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:lambda:us-west-2:123456789012:function:dev-experimental-*"
+    },
+    {
+      "id": "eip-alloc-1234567890abcdef0",
+      "type": "Elastic IP",
+      "issue": "5 Elastic IPs not associated with running instances for 60+ days",
+      "cost_monthly": 18.00,
+      "cost_annual": 216.00,
+      "severity": "medium",
+      "action": "release",
+      "tags": {
+        "Name": "spare-eips",
+        "Environment": "development",
+        "Purpose": "spare-capacity",
+        "Team": "infrastructure"
+      },
+      "region": "eu-west-1",
+      "account_id": "987654321098",
+      "resource_arn": "arn:aws:ec2:eu-west-1:987654321098:eip-allocation/eipalloc-1234567890abcdef0"
+    },
+    {
+      "id": "eni-1234567890abcdef0",
+      "type": "ENI",
+      "issue": "12 orphaned Elastic Network Interfaces from terminated instances",
+      "cost_monthly": 0.00,
+      "cost_annual": 0.00,
+      "severity": "low",
+      "action": "delete",
+      "tags": {
+        "CreatedBy": "ec2-instance",
+        "Status": "orphaned",
+        "CleanupRequired": "true"
+      },
+      "region": "ap-southeast-1",
+      "account_id": "555666777888",
+      "resource_arn": "arn:aws:ec2:ap-southeast-1:555666777888:network-interface/eni-1234567890abcdef0"
+    },
+    {
+      "id": "ami-dev-old-images",
+      "type": "AMI",
+      "issue": "23 unused AMIs older than 180 days - 45TB total storage",
+      "size_gb": 46080,
+      "cost_monthly": 460.80,
+      "cost_annual": 5529.60,
+      "severity": "medium",
+      "action": "deregister",
+      "tags": {
+        "Name": "dev-golden-images-*",
+        "Environment": "development",
+        "Purpose": "golden-images",
+        "Created": "2025-08-15",
+        "Status": "deprecated"
+      },
+      "region": "us-east-1",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:ec2:us-east-1:123456789012:image/ami-1234567890abcdef0"
+    },
+    {
+      "id": "sg-dev-unused-security-groups",
+      "type": "Security Group",
+      "issue": "18 security groups not attached to any ENI for 90+ days",
+      "cost_monthly": 0.00,
+      "cost_annual": 0.00,
+      "severity": "low",
+      "action": "delete",
+      "tags": {
+        "Name": "dev-app-sg-*",
+        "Environment": "development",
+        "Application": "various",
+        "Status": "unused"
+      },
+      "region": "us-west-2",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:ec2:us-west-2:123456789012:security-group/sg-1234567890abcdef0"
+    },
+    {
+      "id": "kms-dev-unused-keys",
+      "type": "KMS Key",
+      "issue": "7 KMS keys with no usage in 120 days, created for development projects",
+      "cost_monthly": 7.00,
+      "cost_annual": 84.00,
+      "severity": "low",
+      "action": "schedule_deletion",
+      "tags": {
+        "Name": "dev-encryption-keys",
+        "Environment": "development",
+        "Purpose": "encryption",
+        "Project": "completed",
+        "Status": "unused"
+      },
+      "region": "eu-west-1",
+      "account_id": "987654321098",
+      "resource_arn": "arn:aws:kms:eu-west-1:987654321098:key/12345678-1234-1234-1234-123456789012"
+    },
+    {
+      "id": "cf-dev-unused-distributions",
+      "type": "CloudFront Distribution",
+      "issue": "3 CloudFront distributions with 0 requests in last 60 days",
+      "cost_monthly": 0.00,
+      "cost_annual": 0.00,
+      "severity": "low",
+      "action": "delete",
+      "tags": {
+        "Name": "dev-cdn-*",
+        "Environment": "development",
+        "Purpose": "content-delivery",
+        "Status": "inactive"
+      },
+      "region": "us-east-1",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:cloudfront::123456789012:distribution/E1234567890123"
+    },
+    {
+      "id": "route53-dev-unused-hosted-zones",
+      "type": "Route 53 Hosted Zone",
+      "issue": "5 Route 53 hosted zones with 0 queries in last 90 days",
+      "cost_monthly": 25.00,
+      "cost_annual": 300.00,
+      "severity": "medium",
+      "action": "delete",
+      "tags": {
+        "Name": "dev-domains-*",
+        "Environment": "development",
+        "Purpose": "dns-hosting",
+        "Domain": "dev.company.com",
+        "Status": "unused"
+      },
+      "region": "us-east-1",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:route53:::hostedzone/Z1234567890123"
+    },
+    {
+      "id": "vpc-dev-unused-vpcs",
+      "type": "VPC",
+      "issue": "2 unused VPCs with no active resources for 120 days",
+      "cost_monthly": 0.00,
+      "cost_annual": 0.00,
+      "severity": "low",
+      "action": "delete",
+      "tags": {
+        "Name": "dev-vpc-*",
+        "Environment": "development",
+        "Purpose": "network-isolation",
+        "Project": "completed",
+        "Status": "empty"
+      },
+      "region": "ap-southeast-1",
+      "account_id": "555666777888",
+      "resource_arn": "arn:aws:ec2:ap-southeast-1:555666777888:vpc/vpc-1234567890abcdef0"
+    },
+    {
+      "id": "igw-dev-unused-gateways",
+      "type": "Internet Gateway",
+      "issue": "3 Internet Gateways attached to unused VPCs",
+      "cost_monthly": 0.00,
+      "cost_annual": 0.00,
+      "severity": "low",
+      "action": "detach_delete",
+      "tags": {
+        "Name": "igw-dev-*",
+        "Environment": "development",
+        "VPC": "dev-vpc-*",
+        "Status": "unused"
+      },
+      "region": "us-west-2",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:ec2:us-west-2:123456789012:internet-gateway/igw-1234567890abcdef0"
+    },
+    {
+      "id": "subnet-dev-unused-subnets",
+      "type": "Subnet",
+      "issue": "24 unused subnets in development VPCs with no active resources",
+      "cost_monthly": 0.00,
+      "cost_annual": 0.00,
+      "severity": "low",
+      "action": "delete",
+      "tags": {
+        "Name": "subnet-dev-*",
+        "Environment": "development",
+        "VPC": "dev-vpc-*",
+        "Type": "private",
+        "Status": "empty"
+      },
+      "region": "eu-west-1",
+      "account_id": "987654321098",
+      "resource_arn": "arn:aws:ec2:eu-west-1:987654321098:subnet/subnet-1234567890abcdef0"
+    }
+  ]
+}

@@ -1,0 +1,242 @@
+{
+  "generated_at": "2026-04-05T18:15:17.102471",
+  "summary": {
+    "total_findings": 15,
+    "potential_monthly_savings": 6721.04,
+    "potential_annual_savings": 80652.48
+  },
+  "findings": [
+    {
+      "id": "ebs-volume-3281437565",
+      "type": "EBS Volume",
+      "issue": "Old snapshot (29 snapshots > 90 days)",
+      "cost_monthly": 328.03,
+      "cost_annual": 3936.36,
+      "severity": "low",
+      "action": "resize",
+      "tags": {
+        "env": "test"
+      },
+      "region": "us-west-2",
+      "account_id": "123456789012"
+    },
+    {
+      "id": "auto-scaling-group-5692293957",
+      "type": "Auto Scaling Group",
+      "issue": "Optimization opportunity for Auto Scaling Group",
+      "cost_monthly": 454.25,
+      "cost_annual": 5451.0,
+      "severity": "medium",
+      "action": "delete",
+      "tags": {
+        "env": "dev",
+        "team": "data",
+        "service": "web"
+      },
+      "region": "us-west-2",
+      "account_id": "123456789012"
+    },
+    {
+      "id": "auto-scaling-group-3210511879",
+      "type": "Auto Scaling Group",
+      "issue": "Optimization opportunity for Auto Scaling Group",
+      "cost_monthly": 289.23,
+      "cost_annual": 3470.76,
+      "severity": "high",
+      "action": "resize",
+      "tags": {
+        "env": "test",
+        "service": "worker"
+      },
+      "region": "us-east-1",
+      "account_id": "123456789012"
+    },
+    {
+      "id": "ec2-instance-7026978577",
+      "type": "EC2 Instance",
+      "issue": "Running outside business hours",
+      "cost_monthly": 615.12,
+      "cost_annual": 7381.44,
+      "severity": "high",
+      "action": "terminate",
+      "tags": {
+        "env": "dev",
+        "service": "worker"
+      },
+      "region": "ap-southeast-1",
+      "account_id": "123456789012"
+    },
+    {
+      "id": "ebs-volume-5583768347",
+      "type": "EBS Volume",
+      "issue": "Unattached for 38+ days",
+      "cost_monthly": 754.31,
+      "cost_annual": 9051.72,
+      "severity": "low",
+      "action": "snapshot",
+      "tags": {
+        "env": "staging",
+        "team": "platform",
+        "service": "worker"
+      },
+      "region": "ap-southeast-1",
+      "account_id": "123456789012"
+    },
+    {
+      "id": "elb-1699051624",
+      "type": "ELB",
+      "issue": "Optimization opportunity for ELB",
+      "cost_monthly": 72.07,
+      "cost_annual": 864.84,
+      "severity": "high",
+      "action": "delete",
+      "tags": {
+        "env": "test",
+        "team": "infra",
+        "service": "api"
+      },
+      "region": "us-east-1",
+      "account_id": "123456789012"
+    },
+    {
+      "id": "rds-instance-5120269011",
+      "type": "RDS Instance",
+      "issue": "RDS instance with no connections for 123 days",
+      "cost_monthly": 68.23,
+      "cost_annual": 818.76,
+      "severity": "medium",
+      "action": "snapshot",
+      "tags": {
+        "env": "dev",
+        "service": "cache"
+      },
+      "region": "us-west-2",
+      "account_id": "123456789012"
+    },
+    {
+      "id": "auto-scaling-group-8087335388",
+      "type": "Auto Scaling Group",
+      "issue": "Optimization opportunity for Auto Scaling Group",
+      "cost_monthly": 250.71,
+      "cost_annual": 3008.52,
+      "severity": "high",
+      "action": "delete",
+      "tags": {
+        "env": "dev",
+        "service": "worker"
+      },
+      "region": "ap-southeast-1",
+      "account_id": "123456789012"
+    },
+    {
+      "id": "s3-bucket-2141765652",
+      "type": "S3 Bucket",
+      "issue": "No lifecycle policy configured",
+      "cost_monthly": 343.51,
+      "cost_annual": 4122.12,
+      "severity": "high",
+      "action": "lifecycle",
+      "tags": {
+        "env": "staging",
+        "team": "infra"
+      },
+      "region": "ap-southeast-1",
+      "account_id": "123456789012"
+    },
+    {
+      "id": "ebs-volume-2306492280",
+      "type": "EBS Volume",
+      "issue": "Low utilization (<10% IOPS)",
+      "cost_monthly": 822.57,
+      "cost_annual": 9870.84,
+      "severity": "high",
+      "action": "resize",
+      "tags": {
+        "env": "dev",
+        "team": "data",
+        "service": "database"
+      },
+      "region": "us-west-2",
+      "account_id": "123456789012"
+    },
+    {
+      "id": "cloudwatch-logs-7281578438",
+      "type": "CloudWatch Logs",
+      "issue": "Log group with 772GB data, retention set to 80 days",
+      "cost_monthly": 443.58,
+      "cost_annual": 5322.96,
+      "severity": "medium",
+      "action": "archive",
+      "tags": {
+        "env": "staging",
+        "team": "data",
+        "service": "api"
+      },
+      "region": "us-west-2",
+      "account_id": "123456789012"
+    },
+    {
+      "id": "s3-bucket-9976141663",
+      "type": "S3 Bucket",
+      "issue": "Bucket with 68GB of infrequently accessed data",
+      "cost_monthly": 484.19,
+      "cost_annual": 5810.28,
+      "severity": "low",
+      "action": "archive",
+      "tags": {
+        "env": "test",
+        "team": "platform",
+        "service": "web"
+      },
+      "region": "us-west-2",
+      "account_id": "123456789012"
+    },
+    {
+      "id": "ebs-volume-5443148129",
+      "type": "EBS Volume",
+      "issue": "Old snapshot (44 snapshots > 90 days)",
+      "cost_monthly": 967.21,
+      "cost_annual": 11606.52,
+      "severity": "low",
+      "action": "resize",
+      "tags": {
+        "env": "test",
+        "team": "platform"
+      },
+      "region": "us-west-2",
+      "account_id": "123456789012"
+    },
+    {
+      "id": "ebs-volume-5272403409",
+      "type": "EBS Volume",
+      "issue": "Unattached for 80+ days",
+      "cost_monthly": 379.85,
+      "cost_annual": 4558.2,
+      "severity": "medium",
+      "action": "snapshot",
+      "tags": {
+        "env": "prod",
+        "team": "infra",
+        "service": "database"
+      },
+      "region": "eu-west-1",
+      "account_id": "123456789012"
+    },
+    {
+      "id": "auto-scaling-group-3975118889",
+      "type": "Auto Scaling Group",
+      "issue": "Optimization opportunity for Auto Scaling Group",
+      "cost_monthly": 448.18,
+      "cost_annual": 5378.16,
+      "severity": "low",
+      "action": "resize",
+      "tags": {
+        "env": "prod",
+        "team": "backend",
+        "service": "api"
+      },
+      "region": "eu-west-1",
+      "account_id": "123456789012"
+    }
+  ]
+}

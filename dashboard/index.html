@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS Cost Optimizer - Findings Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .summary-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid #667eea;
+        }
+
+        .summary-card h3 {
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .summary-card .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .summary-card.savings .value {
+            color: #28a745;
+        }
+
+        .summary-card.warning {
+            border-left-color: #ffc107;
+        }
+
+        .summary-card.warning .value {
+            color: #ffc107;
+        }
+
+        .controls {
+            padding: 20px 30px;
+            background: white;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        select, input {
+            padding: 8px 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            font-size: 0.95em;
+        }
+
+        button {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #764ba2;
+        }
+
+        button.secondary {
+            background: #6c757d;
+        }
+
+        button.secondary:hover {
+            background: #5a6268;
+        }
+
+        .findings-list {
+            padding: 30px;
+        }
+
+        .finding-item {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+        }
+
+        .finding-item:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .finding-item.removed {
+            opacity: 0.6;
+            background: #f8f9fa;
+        }
+
+        .finding-item.kept {
+            border-left: 4px solid #6c757d;
+        }
+
+        .finding-item.marked-remove {
+            border-left: 4px solid #28a745;
+            background: #f0fff4;
+        }
+
+        .finding-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .finding-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #212529;
+        }
+
+        .finding-type {
+            display: inline-block;
+            font-size: 0.85em;
+            padding: 4px 12px;
+            background: #e7f3ff;
+            color: #004085;
+            border-radius: 20px;
+            margin-left: 10px;
+        }
+
+        .finding-body {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 20px;
+            margin-bottom: 15px;
+            padding: 15px 0;
+            border-top: 1px solid #e9ecef;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .finding-detail {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .finding-detail label {
+            font-size: 0.85em;
+            color: #6c757d;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .finding-detail value {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #212529;
+        }
+
+        .severity {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+
+        .severity.high {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .severity.medium {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .severity.low {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .savings {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #28a745;
+        }
+
+        .finding-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .action-buttons button {
+            padding: 8px 16px;
+            font-size: 0.95em;
+        }
+
+        .action-buttons button.keep {
+            background: #6c757d;
+        }
+
+        .action-buttons button.keep:hover {
+            background: #5a6268;
+        }
+
+        .action-buttons button.remove {
+            background: #28a745;
+        }
+
+        .action-buttons button.remove:hover {
+            background: #218838;
+        }
+
+        .action-status {
+            font-size: 0.9em;
+            padding: 4px 12px;
+            background: #e7f3ff;
+            color: #004085;
+            border-radius: 4px;
+        }
+
+        .action-status.keep {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .action-status.remove {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .footer {
+            background: #f8f9fa;
+            padding: 30px;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .total-savings {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+
+        .total-savings .label {
+            display: block;
+            font-size: 0.7em;
+            color: #6c757d;
+            margin-bottom: 5px;
+        }
+
+        .total-savings .amount {
+            color: #28a745;
+        }
+
+        .footer-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.8em;
+            }
+
+            .summary {
+                grid-template-columns: 1fr;
+            }
+
+            .finding-body {
+                grid-template-columns: 1fr;
+            }
+
+            .footer {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>💰 AWS Cost Optimizer</h1>
+            <p>Review and approve cost optimization recommendations</p>
+            <button onclick="logout()" style="position: absolute; top: 20px; right: 30px; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); padding: 8px 16px; border-radius: 4px; cursor: pointer;">Logout</button>
+        </header>
+
+        <div class="summary">
+            <div class="summary-card">
+                <h3>Total Findings</h3>
+                <div class="value" id="totalFindings">--</div>
+            </div>
+            <div class="summary-card savings">
+                <h3>Potential Monthly Savings</h3>
+                <div class="value" id="monthlySavings">--</div>
+            </div>
+            <div class="summary-card savings">
+                <h3>Potential Annual Savings</h3>
+                <div class="value" id="annualSavings">--</div>
+            </div>
+            <div class="summary-card warning">
+                <h3>Actions Marked</h3>
+                <div class="value" id="actionsMarked">0 / --</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="filter-group">
+                <label>Filter by Type:</label>
+                <select id="typeFilter">
+                    <option value="">All Types</option>
+                    <option value="EBS Volume">EBS Volume</option>
+                    <option value="EC2 Instance">EC2 Instance</option>
+                    <option value="S3 Bucket">S3 Bucket</option>
+                    <option value="CloudWatch">CloudWatch Logs</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label>Filter by Severity:</label>
+                <select id="severityFilter">
+                    <option value="">All Severities</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label>Filter by Status:</label>
+                <select id="statusFilter">
+                    <option value="">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="keep">Keep</option>
+                    <option value="remove">Remove</option>
+                </select>
+            </div>
+
+            <button class="secondary" onclick="exportCSV()">📥 Export CSV</button>
+            <button class="secondary" onclick="resetFilters()">🔄 Reset</button>
+        </div>
+
+        <div class="findings-list" id="findingsList">
+            <div class="loading">
+                <div class="loading-spinner"></div>
+                <p>Loading findings...</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <div class="total-savings">
+                <span class="label">Your Estimated Annual Savings:</span>
+                <span class="amount" id="footerSavings">$0</span>
+            </div>
+            <div class="footer-actions">
+                <button onclick="saveActions()">💾 Save My Choices</button>
+                <button class="secondary" onclick="viewHistory()">📊 View History</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check authentication
+        function checkAuth() {
+            const authCookie = document.cookie.split(';').find(c => c.trim().startsWith('auth='));
+            if (!authCookie) {
+                window.location.href = '/login.html';
+                return false;
+            }
+            return true;
+        }
+
+        // Logout function
+        function logout() {
+            document.cookie = 'auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+            window.location.href = '/login.html';
+        }
+
+        if (!checkAuth()) {
+            // Will redirect in checkAuth
+        } else {
+            // Continue with dashboard logic
+            let allFindings = [];
+            let userActions = {};
+            const reportsBucket = 'YOUR_REPORTS_BUCKET'; // Set by CloudFormation
+
+            // Load findings from S3
+            async function loadFindings() {
+                try {
+                    const response = await fetch(`https://s3.amazonaws.com/${reportsBucket}/findings-latest.json`);
+                    const data = await response.json();
+                    allFindings = data.findings || [];
+                    
+                    updateSummary();
+                    renderFindings();
+                    loadUserActions();
+                } catch (error) {
+                    showError('Failed to load findings: ' + error.message);
+                }
+            }
+
+        function updateSummary() {
+            const total = allFindings.length;
+            const monthlySavings = allFindings.reduce((sum, f) => sum + (f.cost_monthly || 0), 0);
+            const annualSavings = allFindings.reduce((sum, f) => sum + (f.cost_annual || 0), 0);
+
+            document.getElementById('totalFindings').textContent = total;
+            document.getElementById('monthlySavings').textContent = '$' + monthlySavings.toFixed(2);
+            document.getElementById('annualSavings').textContent = '$' + annualSavings.toFixed(2);
+        }
+
+        function renderFindings() {
+            const container = document.getElementById('findingsList');
+            const typeFilter = document.getElementById('typeFilter').value;
+            const severityFilter = document.getElementById('severityFilter').value;
+            const statusFilter = document.getElementById('statusFilter').value;
+
+            let filtered = allFindings.filter(f => {
+                if (typeFilter && f.type !== typeFilter) return false;
+                if (severityFilter && f.severity !== severityFilter) return false;
+                if (statusFilter) {
+                    const action = userActions[f.id] || 'pending';
+                    if (action !== statusFilter) return false;
+                }
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="loading"><p>No findings match your filters</p></div>';
+                return;
+            }
+
+            container.innerHTML = filtered.map(finding => {
+                const action = userActions[finding.id] || 'pending';
+                const className = action === 'keep' ? 'kept' : action === 'remove' ? 'marked-remove' : '';
+                
+                return `
+                    <div class="finding-item ${className}" id="finding-${finding.id}">
+                        <div class="finding-header">
+                            <div>
+                                <span class="finding-title">${finding.id}</span>
+                                <span class="finding-type">${finding.type}</span>
+                            </div>
+                            <span class="severity ${finding.severity}">${finding.severity.toUpperCase()}</span>
+                        </div>
+
+                        <div class="finding-body">
+                            <div class="finding-detail">
+                                <label>Issue</label>
+                                <value>${finding.issue}</value>
+                            </div>
+                            <div class="finding-detail">
+                                <label>Monthly Cost</label>
+                                <value>$${(finding.cost_monthly || 0).toFixed(2)}</value>
+                            </div>
+                            <div class="finding-detail">
+                                <label>Annual Savings</label>
+                                <value class="savings">$${(finding.cost_annual || 0).toFixed(2)}</value>
+                            </div>
+                            <div class="finding-detail">
+                                <label>Recommended Action</label>
+                                <value>${finding.action || 'Remove'}</value>
+                            </div>
+                        </div>
+
+                        <div class="finding-actions">
+                            <div class="action-buttons">
+                                <button class="keep" onclick="markAction('${finding.id}', 'keep')">✓ KEEP</button>
+                                <button class="remove" onclick="markAction('${finding.id}', 'remove')">✕ REMOVE</button>
+                            </div>
+                            <div class="action-status ${action}" id="status-${finding.id}">
+                                ${action === 'pending' ? '⏳ Pending' : action === 'keep' ? '✓ Keep' : '✓ Remove'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            updateActionCounter();
+            updateTotalSavings();
+        }
+
+        function markAction(findingId, action) {
+            userActions[findingId] = action;
+            renderFindings();
+        }
+
+        function updateActionCounter() {
+            const total = allFindings.length;
+            const marked = Object.keys(userActions).length;
+            document.getElementById('actionsMarked').textContent = `${marked} / ${total}`;
+        }
+
+        function updateTotalSavings() {
+            const savings = Object.keys(userActions)
+                .filter(id => userActions[id] === 'remove')
+                .reduce((sum, id) => {
+                    const finding = allFindings.find(f => f.id === id);
+                    return sum + (finding?.cost_annual || 0);
+                }, 0);
+
+            document.getElementById('footerSavings').textContent = '$' + savings.toFixed(2);
+        }
+
+        function resetFilters() {
+            document.getElementById('typeFilter').value = '';
+            document.getElementById('severityFilter').value = '';
+            document.getElementById('statusFilter').value = '';
+            renderFindings();
+        }
+
+        async function saveActions() {
+            // In real implementation, this would upload to S3
+            console.log('Saving actions:', userActions);
+            showSuccess('Actions saved! Scheduler will execute marked removals.');
+        }
+
+        function exportCSV() {
+            let csv = 'ID,Type,Issue,Monthly Cost,Annual Savings,Action\n';
+            allFindings.forEach(f => {
+                const action = userActions[f.id] || 'Pending';
+                csv += `${f.id},${f.type},"${f.issue}",${f.cost_monthly},${f.cost_annual},${action}\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'cost-optimizer-findings.csv';
+            a.click();
+        }
+
+        function viewHistory() {
+            alert('History view coming soon');
+        }
+
+        function loadUserActions() {
+            // Load from S3 actions.json
+            fetch(`https://s3.amazonaws.com/${reportsBucket}/actions/actions.json`)
+                .then(r => r.json())
+                .then(data => {
+                    data.items?.forEach(item => {
+                        userActions[item.id] = item.user_action;
+                    });
+                    updateActionCounter();
+                    updateTotalSavings();
+                })
+                .catch(() => {
+                    // First time, no actions yet
+                });
+        }
+
+        function showError(msg) {
+            const container = document.getElementById('findingsList');
+            container.innerHTML = `<div class="error">${msg}</div>`;
+        }
+
+        function showSuccess(msg) {
+            const div = document.createElement('div');
+            div.className = 'success';
+            div.textContent = msg;
+            document.body.insertBefore(div, document.body.firstChild);
+            setTimeout(() => div.remove(), 3000);
+        }
+
+        // Load on page load
+        document.addEventListener('DOMContentLoaded', loadFindings);
+
+        // Add filter listeners
+        document.getElementById('typeFilter').addEventListener('change', renderFindings);
+        document.getElementById('severityFilter').addEventListener('change', renderFindings);
+        document.getElementById('statusFilter').addEventListener('change', renderFindings);
+    </script>
+</body>
+</html>

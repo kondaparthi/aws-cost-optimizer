@@ -1,0 +1,30 @@
+{
+  "last_updated": "2024-04-05T15:00:00Z",
+  "user_id": "admin@example.com",
+  "items": [
+    {
+      "id": "vol-1234567890abcdef0",
+      "user_action": "remove",
+      "timestamp": "2024-04-05T14:45:00Z",
+      "reason": "Old development volume, safe to delete"
+    },
+    {
+      "id": "i-0123456789abcdef0",
+      "user_action": "keep",
+      "timestamp": "2024-04-05T14:50:00Z",
+      "reason": "Still needed for development testing"
+    },
+    {
+      "id": "my-old-bucket-2023",
+      "user_action": "remove",
+      "timestamp": "2024-04-05T14:55:00Z",
+      "reason": "Data can be moved to cheaper storage class"
+    },
+    {
+      "id": "log-group-prod-api",
+      "user_action": "keep",
+      "timestamp": "2024-04-05T15:00:00Z",
+      "reason": "Production logs need to be retained"
+    }
+  ]
+}

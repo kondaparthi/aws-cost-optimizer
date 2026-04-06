@@ -1,0 +1,238 @@
+name: Deploy Lambda to AWS
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'cloudformation/**'
+      - 'requirements.txt'
+      - '.github/workflows/deploy-lambda.yml'
+  workflow_dispatch:
+    inputs:
+      stack_name:
+        description: 'CloudFormation stack name'
+        required: false
+        default: 'cost-optimizer'
+      aws_region:
+        description: 'AWS region'
+        required: false
+        default: 'us-east-1'
+
+env:
+  AWS_REGION: us-east-1
+  ARTIFACT_BUCKET: cost-optimizer-artifacts-${{ github.event.repository.name }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest tests/unit -v --cov=src/aws_cost_optimizer --cov-report=term
+
+      - name: Security scan with bandit
+        run: |
+          bandit -r src -f json -o bandit-report.json || true
+          cat bandit-report.json
+
+      - name: Build Lambda package
+        run: |
+          mkdir -p build/lambda
+          cp -r src/aws_cost_optimizer build/lambda/
+          pip install --target build/lambda -r requirements.txt
+          cd build/lambda
+          zip -r ../cost-optimizer-lambda.zip .
+          cd ../..
+          ls -lh build/cost-optimizer-lambda.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: lambda-package
+          path: build/cost-optimizer-lambda.zip
+          retention-days: 5
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: lambda-package
+          path: build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Create S3 bucket for Lambda code (if needed)
+        run: |
+          aws s3api head-bucket --bucket $ARTIFACT_BUCKET 2>/dev/null || \
+          aws s3 mb s3://$ARTIFACT_BUCKET --region $AWS_REGION
+
+      - name: Upload Lambda package to S3
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          LAMBDA_KEY="lambda/${TIMESTAMP}-cost-optimizer-lambda.zip"
+          aws s3 cp build/cost-optimizer-lambda.zip s3://$ARTIFACT_BUCKET/$LAMBDA_KEY
+          echo "LAMBDA_S3_KEY=$LAMBDA_KEY" >> $GITHUB_ENV
+          echo "Lambda package uploaded: s3://$ARTIFACT_BUCKET/$LAMBDA_KEY"
+
+      - name: Update analysis Lambda
+        continue-on-error: true
+        run: |
+          ANALYSIS_LAMBDA=$(aws lambda list-functions \
+            --region $AWS_REGION \
+            --query "Functions[?FunctionName=='cost-optimizer-analysis'].FunctionArn" \
+            --output text)
+          
+          if [ -z "$ANALYSIS_LAMBDA" ]; then
+            echo "Analysis Lambda not found. Skipping update."
+            exit 0
+          fi
+          
+          aws lambda update-function-code \
+            --function-name cost-optimizer-analysis \
+            --s3-bucket $ARTIFACT_BUCKET \
+            --s3-key $LAMBDA_S3_KEY \
+            --region $AWS_REGION \
+            --query "FunctionArn" \
+            --output text
+
+      - name: Update scheduler Lambda
+        continue-on-error: true
+        run: |
+          SCHEDULER_LAMBDA=$(aws lambda list-functions \
+            --region $AWS_REGION \
+            --query "Functions[?FunctionName=='cost-optimizer-scheduler'].FunctionArn" \
+            --output text)
+          
+          if [ -z "$SCHEDULER_LAMBDA" ]; then
+            echo "Scheduler Lambda not found. Skipping update."
+            exit 0
+          fi
+          
+          aws lambda update-function-code \
+            --function-name cost-optimizer-scheduler \
+            --s3-bucket $ARTIFACT_BUCKET \
+            --s3-key $LAMBDA_S3_KEY \
+            --region $AWS_REGION \
+            --query "FunctionArn" \
+            --output text
+
+      - name: Verify Lambda updates
+        run: |
+          echo "Checking analysis Lambda status..."
+          aws lambda get-function-configuration \
+            --function-name cost-optimizer-analysis \
+            --region $AWS_REGION \
+            --query 'LastUpdateStatus' \
+            --output text
+          
+          echo "Checking scheduler Lambda status..."
+          aws lambda get-function-configuration \
+            --function-name cost-optimizer-scheduler \
+            --region $AWS_REGION \
+            --query 'LastUpdateStatus' \
+            --output text
+
+      - name: Create deployment summary
+        run: |
+          cat > deployment-summary.txt << EOF
+          Deployment Summary
+          ==================
+          
+          Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          Commit: ${{ github.sha }}
+          Branch: ${{ github.ref }}
+          
+          Lambda Package:
+            Bucket: $ARTIFACT_BUCKET
+            Key: $LAMBDA_S3_KEY
+          
+          Updated Functions:
+            - cost-optimizer-analysis
+            - cost-optimizer-scheduler
+          
+          AWS Region: $AWS_REGION
+          
+          Monitor Logs:
+            aws logs tail /aws/lambda/cost-optimizer-analysis --follow --region $AWS_REGION
+            aws logs tail /aws/lambda/cost-optimizer-scheduler --follow --region $AWS_REGION
+          
+          View Dashboard:
+            https://console.aws.amazon.com/cloudwatch/home?region=$AWS_REGION#dashboards:name=CostOptimizerMetrics
+          EOF
+          
+          cat deployment-summary.txt
+
+      - name: Upload deployment summary
+        uses: actions/upload-artifact@v3
+        with:
+          name: deployment-summary
+          path: deployment-summary.txt
+
+  notify:
+    needs: [ build, deploy ]
+    runs-on: ubuntu-latest
+    if: always()
+    permissions:
+      contents: read
+
+    steps:
+      - name: Determine status
+        id: status
+        run: |
+          if [ "${{ needs.build.result }}" = "success" ] && [ "${{ needs.deploy.result }}" = "success" ]; then
+            echo "status=✅ Deployment Successful" >> $GITHUB_OUTPUT
+          else
+            echo "status=❌ Deployment Failed" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Post to GitHub
+        if: github.event_name == 'push'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const status = "${{ steps.status.outputs.status }}";
+            const commit = context.sha.substring(0, 7);
+            const message = `${status}\n\nCommit: ${commit}\nWorkflow: ${context.payload.repository.html_url}/actions/runs/${context.runId}`;
+            
+            github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: "${{ needs.deploy.result }}" === "success" ? "success" : "failure",
+              description: "Lambda deployment",
+              context: "AWS Deployment",
+              target_url: `${context.payload.repository.html_url}/actions/runs/${context.runId}`
+            });

@@ -1,0 +1,60 @@
+{
+  "last_updated": "2026-04-05T11:30:00Z",
+  "user_id": "sarah.johnson@company.com",
+  "items": [
+    {
+      "id": "vol-0a1b2c3d4e5f6789a",
+      "user_action": "remove",
+      "timestamp": "2026-04-05T10:45:00Z",
+      "reason": "Old development volume from web migration project, safe to delete"
+    },
+    {
+      "id": "i-0abcd123456789ef0",
+      "user_action": "remove",
+      "timestamp": "2026-04-05T10:50:00Z",
+      "reason": "Development API server not needed for current sprint"
+    },
+    {
+      "id": "my-company-prod-logs-2024",
+      "user_action": "keep",
+      "timestamp": "2026-04-05T11:00:00Z",
+      "reason": "CloudTrail logs required for compliance, will implement lifecycle policy separately"
+    },
+    {
+      "id": "db.t3.medium-postgres-prod",
+      "user_action": "keep",
+      "timestamp": "2026-04-05T11:05:00Z",
+      "reason": "Production database, low utilization due to off-peak hours but still needed"
+    },
+    {
+      "id": "nat-0abcd123456789ef0",
+      "user_action": "remove",
+      "timestamp": "2026-04-05T11:10:00Z",
+      "reason": "Staging environment NAT gateway no longer needed"
+    },
+    {
+      "id": "vol-snap-1234567890abcdef0",
+      "user_action": "keep",
+      "timestamp": "2026-04-05T11:15:00Z",
+      "reason": "Snapshots from terminated instances may be needed for recovery"
+    },
+    {
+      "id": "route53-dev-unused-hosted-zones",
+      "user_action": "remove",
+      "timestamp": "2026-04-05T11:20:00Z",
+      "reason": "Development domains no longer active, can be deleted"
+    },
+    {
+      "id": "i-0fedcba9876543210",
+      "user_action": "keep",
+      "timestamp": "2026-04-05T11:25:00Z",
+      "reason": "Production web server, utilization may improve with traffic"
+    },
+    {
+      "id": "staging-app-backups",
+      "user_action": "remove",
+      "timestamp": "2026-04-05T11:30:00Z",
+      "reason": "Staging backups can be moved to cheaper storage class"
+    }
+  ]
+}

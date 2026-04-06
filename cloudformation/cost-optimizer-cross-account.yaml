@@ -1,0 +1,171 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS Cost Optimizer - Multi-Account Cross-Account Role Setup'
+
+Parameters:
+  CentralAccountId:
+    Type: String
+    Description: AWS Account ID where Cost Optimizer Lambdas are deployed
+    AllowedPattern: '^\d{12}$'
+  
+  RoleName:
+    Type: String
+    Default: CostOptimizerRole
+    Description: Name of cross-account role to create
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Multi-Account Configuration
+        Parameters:
+          - CentralAccountId
+          - RoleName
+
+Resources:
+  # ========================================================================
+  # Cross-Account Role (deployed in each target account)
+  # ========================================================================
+  
+  CostOptimizerCrossAccountRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      Description: Allows Cost Optimizer Lambda in central account to analyze and optimize this account
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${CentralAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Sub "cost-optimizer-${AWS::AccountId}"
+      Tags:
+        - Key: Application
+          Value: CostOptimizer
+        - Key: Purpose
+          Value: CrossAccountAccess
+
+  # ========================================================================
+  # Policies for Cost Analysis
+  # ========================================================================
+  
+  CostOptimizerAnalysisPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: cost-optimizer-analysis-policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          # EBS
+          - Effect: Allow
+            Action:
+              - ec2:DescribeVolumes
+              - ec2:DescribeSnapshots
+              - ec2:DescribeTags
+            Resource: "*"
+          
+          # EC2
+          - Effect: Allow
+            Action:
+              - ec2:DescribeInstances
+              - ec2:DescribeInstanceStatus
+              - ec2:DescribeAutoScalingGroups
+              - ec2:DescribeInstanceAttribute
+            Resource: "*"
+          
+          # CloudWatch (for metrics and logs)
+          - Effect: Allow
+            Action:
+              - cloudwatch:GetMetricStatistics
+              - cloudwatch:ListMetrics
+              - logs:DescribeLogGroups
+              - logs:DescribeLogStreams
+            Resource: "*"
+          
+          # S3
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:GetBucketTagging
+              - s3:ListBucketMultipartUploads
+            Resource: "arn:aws:s3:::*"
+          
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:GetObjectTagging
+            Resource: "arn:aws:s3:::*/*"
+          
+          # RDS
+          - Effect: Allow
+            Action:
+              - rds:DescribeDBInstances
+              - rds:DescribeDBClusters
+              - rds:ListTagsForResource
+            Resource: "*"
+          
+          # EMR
+          - Effect: Allow
+            Action:
+              - elasticmapreduce:ListClusters
+              - elasticmapreduce:DescribeCluster
+            Resource: "*"
+      Roles:
+        - !Ref CostOptimizerCrossAccountRole
+
+  # ========================================================================
+  # Policies for Scheduler (EC2 Start/Stop)
+  # ========================================================================
+  
+  CostOptimizerSchedulerPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: cost-optimizer-scheduler-policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:StartInstances
+              - ec2:StopInstances
+              - ec2:RebootInstances
+            Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:instance/*"
+            Condition:
+              StringEquals:
+                ec2:ResourceTag/SchedulePolicy:
+                  - "off-hours"
+                  - "business-hours"
+                  - "weekends-only"
+                  - "always-off"
+          
+          # Allow reading instance tags to determine schedule
+          - Effect: Allow
+            Action:
+              - ec2:DescribeInstances
+              - ec2:DescribeTags
+            Resource: "*"
+      Roles:
+        - !Ref CostOptimizerCrossAccountRole
+
+Outputs:
+  RoleArn:
+    Description: ARN of cross-account role
+    Value: !GetAtt CostOptimizerCrossAccountRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-RoleArn"
+  
+  ExternalId:
+    Description: External ID for role assumption
+    Value: !Sub "cost-optimizer-${AWS::AccountId}"
+    Export:
+      Name: !Sub "${AWS::StackName}-ExternalId"
+  
+  ConfigSnippet:
+    Description: Add this to your cost-optimizer config.yaml
+    Value: !Sub |
+      accounts:
+        - id: "${AWS::AccountId}"
+          role_arn: "${CostOptimizerCrossAccountRole.Arn}"
+          name: "YourAccountName"
