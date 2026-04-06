@@ -331,6 +331,8 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Ref DashboardS3Bucket
+      VersioningConfiguration:
+        Status: Enabled
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
