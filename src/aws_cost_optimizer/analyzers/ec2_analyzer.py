@@ -4,7 +4,7 @@ EC2 Analyzer: Detect idle instances, right-sizing opportunities, unused ASGs.
 
 from typing import Dict, Any
 from datetime import datetime, timedelta
-from .base_analyzer import BaseAnalyzer, AnalyzerResult, Finding, CostCalculator
+from .base_analyzer import BaseAnalyzer, AnalyzerResult, Finding
 
 
 class EC2Analyzer(BaseAnalyzer):

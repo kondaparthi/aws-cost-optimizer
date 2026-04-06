@@ -4,7 +4,7 @@ EBS Analyzer: Detect unattached volumes, old snapshots, and estimate cleanup cos
 
 from typing import Dict, Any
 from datetime import datetime, timedelta
-from .base_analyzer import BaseAnalyzer, AnalyzerResult, Finding, CostCalculator
+from .base_analyzer import BaseAnalyzer, AnalyzerResult, Finding
 
 
 class EBSAnalyzer(BaseAnalyzer):
@@ -50,7 +50,7 @@ class EBSAnalyzer(BaseAnalyzer):
                     continue
                 
                 # Calculate cost
-                monthly_cost = CostCalculator.ebs_volume_cost(size_gb, volume_type)
+                monthly_cost = self.cost_calculator.ebs_volume_cost(size_gb, volume_type)
                 
                 # Create finding
                 finding = Finding(
@@ -110,7 +110,7 @@ class EBSAnalyzer(BaseAnalyzer):
                     continue
                 
                 # Calculate cost
-                snapshot_cost = CostCalculator.ebs_snapshot_cost(size_gb)
+                snapshot_cost = self.cost_calculator.ebs_snapshot_cost(size_gb)
                 days_old = (now - start_time).days
                 
                 finding = Finding(

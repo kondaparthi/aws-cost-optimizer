@@ -4,7 +4,7 @@ S3 Analyzer: Detect incomplete multipart uploads and lifecycle opportunities.
 
 from typing import Dict, Any
 from datetime import datetime, timedelta
-from .base_analyzer import BaseAnalyzer, AnalyzerResult, Finding, CostCalculator
+from .base_analyzer import BaseAnalyzer, AnalyzerResult, Finding
 
 
 class S3Analyzer(BaseAnalyzer):
@@ -84,7 +84,7 @@ class S3Analyzer(BaseAnalyzer):
                                 total_size_gb += 0.5  # Estimate
                         
                         if old_uploads:
-                            cost = CostCalculator.s3_storage_cost(total_size_gb, "standard")
+                            cost = self.cost_calculator.s3_storage_cost(total_size_gb, "standard")
                             
                             finding = Finding(
                                 resource_id=bucket_name,
