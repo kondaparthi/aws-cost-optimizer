@@ -510,21 +510,4 @@ aws s3 rb s3://cost-optimizer-reports-12345 --force
 aws cloudformation delete-stack --stack-name cost-optimizer-cross-account
 ```
 
----
-
-## Next Steps
-
-1. ✅ Deploy CloudFormation stack
-2. ✅ Confirm SNS subscription
-3. ✅ Test Lambda invocations
-4. ⬜ Review first cost analysis report (next scheduled run)
-5. ⬜ Customize analyzer thresholds based on findings
-6. ⬜ Deploy to multi-account setup (optional)
-7. ⬜ Set up CI/CD pipeline (see [CI/CD Guide](CICD.md))
-8. ⬜ Integrate with ITSM/incident management
-9. ⬜ Link GitHub repo on Upwork portfolio
-
-
----
-
 **Built for mid-market AWS organizations. Deploy once, save continuously.** 🚀
