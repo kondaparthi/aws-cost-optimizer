@@ -5,6 +5,50 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - AWS Cost Optimizer</title>
     <style>
+        :root {
+            color-scheme: light;
+            --bg: #f3f6fb;
+            --bg-accent: radial-gradient(circle at top left, rgba(39, 110, 241, 0.14), transparent 28%), radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.12), transparent 30%), linear-gradient(180deg, #f8fbff 0%, #eef3f8 100%);
+            --panel: rgba(255, 255, 255, 0.86);
+            --panel-border: rgba(148, 163, 184, 0.22);
+            --text: #142033;
+            --muted: #5f6f85;
+            --heading: #0f172a;
+            --input-bg: rgba(255, 255, 255, 0.78);
+            --input-border: rgba(148, 163, 184, 0.36);
+            --input-focus: rgba(37, 99, 235, 0.18);
+            --brand: #2563eb;
+            --brand-strong: #1d4ed8;
+            --brand-soft: rgba(37, 99, 235, 0.1);
+            --shadow: 0 24px 60px rgba(15, 23, 42, 0.14);
+            --error-bg: rgba(239, 68, 68, 0.12);
+            --error-text: #b42318;
+            --toggle-bg: rgba(255, 255, 255, 0.68);
+            --toggle-border: rgba(148, 163, 184, 0.3);
+        }
+
+        body.theme-dark {
+            color-scheme: dark;
+            --bg: #07111f;
+            --bg-accent: radial-gradient(circle at top left, rgba(59, 130, 246, 0.2), transparent 28%), radial-gradient(circle at bottom right, rgba(34, 197, 94, 0.18), transparent 34%), linear-gradient(180deg, #07111f 0%, #0c1728 100%);
+            --panel: rgba(10, 17, 30, 0.82);
+            --panel-border: rgba(71, 85, 105, 0.4);
+            --text: #dbe5f4;
+            --muted: #93a4bc;
+            --heading: #f8fafc;
+            --input-bg: rgba(15, 23, 42, 0.82);
+            --input-border: rgba(71, 85, 105, 0.7);
+            --input-focus: rgba(96, 165, 250, 0.2);
+            --brand: #60a5fa;
+            --brand-strong: #3b82f6;
+            --brand-soft: rgba(96, 165, 250, 0.14);
+            --shadow: 0 30px 80px rgba(2, 6, 23, 0.5);
+            --error-bg: rgba(239, 68, 68, 0.16);
+            --error-text: #fda29b;
+            --toggle-bg: rgba(15, 23, 42, 0.6);
+            --toggle-border: rgba(71, 85, 105, 0.5);
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -12,105 +56,245 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Avenir Next', Avenir, 'Segoe UI', sans-serif;
+            background: var(--bg-accent);
+            color: var(--text);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        body::before,
+        body::after {
+            content: '';
+            position: absolute;
+            border-radius: 999px;
+            filter: blur(10px);
+            z-index: 0;
+        }
+
+        body::before {
+            width: 320px;
+            height: 320px;
+            background: rgba(37, 99, 235, 0.12);
+            top: -120px;
+            left: -80px;
+        }
+
+        body::after {
+            width: 360px;
+            height: 360px;
+            background: rgba(16, 185, 129, 0.1);
+            bottom: -140px;
+            right: -100px;
         }
 
         .login-container {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            background: var(--panel);
+            backdrop-filter: blur(22px);
+            -webkit-backdrop-filter: blur(22px);
+            border: 1px solid var(--panel-border);
+            border-radius: 24px;
+            box-shadow: var(--shadow);
             padding: 40px;
             width: 100%;
-            max-width: 400px;
+            max-width: 430px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .login-container::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 24px;
+            padding: 1px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.04));
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+        }
+
+        .theme-toggle {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid var(--toggle-border);
+            background: var(--toggle-bg);
+            color: var(--text);
+            font-size: 13px;
+            cursor: pointer;
+            transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+        }
+
+        .theme-toggle:hover {
+            transform: translateY(-1px);
         }
 
         .login-header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 28px;
+            padding-top: 10px;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 12px;
+            margin-bottom: 18px;
+            border-radius: 999px;
+            background: var(--brand-soft);
+            color: var(--brand);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
         }
 
         .login-header h1 {
-            color: #667eea;
+            color: var(--heading);
             margin-bottom: 10px;
+            font-size: 32px;
+            letter-spacing: -0.03em;
         }
 
         .login-header p {
-            color: #6c757d;
+            color: var(--muted);
+            font-size: 15px;
+            line-height: 1.6;
         }
 
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 18px;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 5px;
-            color: #495057;
-            font-weight: 500;
+            margin-bottom: 8px;
+            color: var(--heading);
+            font-weight: 600;
+            font-size: 14px;
         }
 
         .form-group input {
             width: 100%;
-            padding: 12px;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
+            padding: 14px 15px;
+            border: 1px solid var(--input-border);
+            border-radius: 14px;
             font-size: 16px;
+            background: var(--input-bg);
+            color: var(--text);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
         }
 
         .form-group input:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.25);
+            border-color: var(--brand);
+            box-shadow: 0 0 0 4px var(--input-focus);
+        }
+
+        .form-group input::placeholder {
+            color: var(--muted);
         }
 
         .login-btn {
             width: 100%;
-            padding: 12px;
-            background: #667eea;
+            padding: 14px;
+            background: linear-gradient(135deg, var(--brand) 0%, var(--brand-strong) 100%);
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: 14px;
             font-size: 16px;
-            font-weight: 500;
+            font-weight: 700;
+            letter-spacing: 0.01em;
             cursor: pointer;
-            transition: background 0.3s;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+            box-shadow: 0 16px 28px rgba(37, 99, 235, 0.24);
         }
 
         .login-btn:hover {
-            background: #764ba2;
+            transform: translateY(-1px);
+            box-shadow: 0 18px 34px rgba(37, 99, 235, 0.3);
         }
 
         .login-btn:disabled {
-            background: #6c757d;
+            opacity: 0.65;
             cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
         }
 
         .error {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 10px;
-            border-radius: 4px;
+            background: var(--error-bg);
+            color: var(--error-text);
+            padding: 12px 14px;
+            border-radius: 14px;
             margin-bottom: 20px;
             display: none;
+            border: 1px solid rgba(239, 68, 68, 0.16);
+            font-size: 14px;
         }
 
         .loading {
             display: none;
             text-align: center;
-            color: #6c757d;
+            color: var(--muted);
+            padding-top: 14px;
+            font-size: 14px;
+        }
+
+        .subtle-note {
+            margin-top: 18px;
+            text-align: center;
+            font-size: 13px;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        @media (max-width: 520px) {
+            body {
+                padding: 16px;
+            }
+
+            .login-container {
+                padding: 28px 22px;
+                border-radius: 20px;
+            }
+
+            .theme-toggle {
+                top: 14px;
+                right: 14px;
+            }
+
+            .login-header h1 {
+                font-size: 28px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="login-container">
+        <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle color theme">
+            <span id="themeIcon">◐</span>
+            <span id="themeLabel">Theme</span>
+        </button>
+
         <div class="login-header">
-            <h1>🔐 AWS Cost Optimizer</h1>
-            <p>Secure Dashboard Login</p>
+            <div class="eyebrow">Secure Access</div>
+            <h1>AWS Cost Optimizer</h1>
+            <p>Sign in to review findings, validate actions, and manage optimization workflows from one unified workspace.</p>
         </div>
 
         <div class="error" id="errorMsg"></div>
@@ -132,10 +316,13 @@
         <div class="loading" id="loading">
             <p>Authenticating...</p>
         </div>
+
+        <p class="subtle-note">Use your Cognito account credentials. Session cookies are stored securely and expire automatically.</p>
     </div>
 
     <script>
         const RAW_AUTH_API_URL = '__AUTH_API_URL__';
+        const THEME_STORAGE_KEY = 'dashboard-theme';
 
         // Configuration - these should be set from CloudFormation outputs
         const CONFIG = {
@@ -145,10 +332,31 @@
             DASHBOARD_URL: '/index.html'
         };
 
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        const themeLabel = document.getElementById('themeLabel');
         const loginForm = document.getElementById('loginForm');
         const loginBtn = document.getElementById('loginBtn');
         const errorMsg = document.getElementById('errorMsg');
         const loading = document.getElementById('loading');
+
+        function applyTheme(theme) {
+            document.body.classList.toggle('theme-dark', theme === 'dark');
+            themeIcon.textContent = theme === 'dark' ? '☀' : '☾';
+            themeLabel.textContent = theme === 'dark' ? 'Light' : 'Dark';
+        }
+
+        function initializeTheme() {
+            const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+            const preferredTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            applyTheme(storedTheme || preferredTheme);
+        }
+
+        themeToggle.addEventListener('click', () => {
+            const nextTheme = document.body.classList.contains('theme-dark') ? 'light' : 'dark';
+            localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+            applyTheme(nextTheme);
+        });
 
         // Utility function to get CSRF token if needed
         function getCsrfToken() {
@@ -249,7 +457,10 @@
         }
 
         // Check authentication status when page loads
-        document.addEventListener('DOMContentLoaded', checkAuthStatus);
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeTheme();
+            checkAuthStatus();
+        });
 
         // Add input validation feedback
         document.getElementById('username').addEventListener('input', function() {
