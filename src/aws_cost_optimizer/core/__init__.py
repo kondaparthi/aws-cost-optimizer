@@ -27,13 +27,14 @@ class Account:
     id: str
     role_arn: str
     name: Optional[str] = None
+    external_id: Optional[str] = None
 
 
 @dataclass
 class AnalysisConfig:
     """Top-level configuration."""
     regions: List[str]
-    accounts: List[Dict[str, str]]  # [{ id, role_arn, name? }]
+    accounts: List[Dict[str, Any]]  # [{ id, role_arn, name?, external_id? }]
     skip_policies: Dict[str, Dict[str, Any]]  # Tag-based skip rules
     thresholds: Dict[str, Any]  # Cost/size thresholds per analyzer
     scheduler: Dict[str, Any]  # Scheduler config (times, schedules)
@@ -66,7 +67,8 @@ class ConfigLoader:
             accounts.append(Account(
                 id=acc["id"],
                 role_arn=acc["role_arn"],
-                name=acc.get("name")
+                name=acc.get("name"),
+                external_id=acc.get("external_id")
             ))
         
         return AnalysisConfig(
@@ -114,12 +116,27 @@ class StructuredLogger:
 class AWSClient:
     """Handles multi-account access via STS assume-role."""
 
-    def __init__(self, region: str, logger: Optional[StructuredLogger] = None):
+    def __init__(
+        self,
+        region: str,
+        logger: Optional[StructuredLogger] = None,
+        account_id: Optional[str] = None,
+        role_arn: Optional[str] = None,
+        external_id: Optional[str] = None,
+    ):
         self.region = region
         self.logger = logger or StructuredLogger(__name__)
+        self.default_account_id = account_id
+        self.default_role_arn = role_arn
+        self.default_external_id = external_id
         self._role_cache = {}  # Cache assumed role sessions
     
-    def get_session(self, account_id: Optional[str] = None, role_arn: Optional[str] = None):
+    def get_session(
+        self,
+        account_id: Optional[str] = None,
+        role_arn: Optional[str] = None,
+        external_id: Optional[str] = None,
+    ):
         """
         Get boto3 session for account (via assume-role if specified).
         
@@ -130,7 +147,11 @@ class AWSClient:
         Returns:
             boto3.Session
         """
-        # If no account specified, use local credentials
+        account_id = account_id or self.default_account_id
+        role_arn = role_arn or self.default_role_arn
+        external_id = external_id or self.default_external_id
+
+        # If no role specified, use local credentials
         if not role_arn:
             self.logger.log_event(
                 "aws_session_local",
@@ -139,17 +160,23 @@ class AWSClient:
             return boto3.Session(region_name=self.region)
         
         # Check cache
-        cache_key = f"{account_id}:{role_arn}"
+        cache_key = f"{account_id}:{role_arn}:{external_id or ''}"
         if cache_key in self._role_cache:
             return self._role_cache[cache_key]
         
         try:
             # Assume role
             sts = boto3.client("sts")
+            assume_role_kwargs = {
+                "RoleArn": role_arn,
+                "RoleSessionName": f"cost-optimizer-{account_id or 'local'}",
+                "DurationSeconds": 3600,
+            }
+            if external_id:
+                assume_role_kwargs["ExternalId"] = external_id
+
             assumed = sts.assume_role(
-                RoleArn=role_arn,
-                RoleSessionName=f"cost-optimizer-{account_id}",
-                DurationSeconds=3600
+                **assume_role_kwargs
             )
             
             credentials = assumed["Credentials"]
@@ -167,6 +194,7 @@ class AWSClient:
                 {
                     "account_id": account_id,
                     "role_arn": role_arn,
+                    "external_id": external_id,
                     "region": self.region
                 }
             )
@@ -179,20 +207,33 @@ class AWSClient:
                 {
                     "account_id": account_id,
                     "role_arn": role_arn,
+                    "external_id": external_id,
                     "error": str(e)
                 },
                 level="ERROR"
             )
             raise
     
-    def get_client(self, service: str, account_id: Optional[str] = None, role_arn: Optional[str] = None):
+    def get_client(
+        self,
+        service: str,
+        account_id: Optional[str] = None,
+        role_arn: Optional[str] = None,
+        external_id: Optional[str] = None,
+    ):
         """Get boto3 client for service in given account."""
-        session = self.get_session(account_id, role_arn)
+        session = self.get_session(account_id, role_arn, external_id)
         return session.client(service)
     
-    def get_resource(self, service: str, account_id: Optional[str] = None, role_arn: Optional[str] = None):
+    def get_resource(
+        self,
+        service: str,
+        account_id: Optional[str] = None,
+        role_arn: Optional[str] = None,
+        external_id: Optional[str] = None,
+    ):
         """Get boto3 resource for service in given account."""
-        session = self.get_session(account_id, role_arn)
+        session = self.get_session(account_id, role_arn, external_id)
         return session.resource(service)
 
 

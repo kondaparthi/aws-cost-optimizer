@@ -16,10 +16,12 @@ regions:
 accounts:
   # - id: "111111111111"
   #   role_arn: "arn:aws:iam::111111111111:role/CostOptimizerRole"
+  #   external_id: "cost-optimizer-111111111111"  # Optional, required if target role trust policy enforces ExternalId
   #   name: "Production"
   # 
   # - id: "222222222222"
   #   role_arn: "arn:aws:iam::222222222222:role/CostOptimizerRole"
+  #   external_id: "cost-optimizer-222222222222"
   #   name: "Staging"
 
 # ============================================================================

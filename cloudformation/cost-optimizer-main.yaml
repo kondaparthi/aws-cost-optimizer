@@ -143,6 +143,15 @@ Resources:
                 Resource:
                   - !Sub "arn:aws:s3:::${ConfigS3Bucket}/*"
                   - !Sub "arn:aws:s3:::${ReportS3Bucket}/*"
+
+              # S3 metadata/list access required by analyzers
+              - Effect: Allow
+                Action:
+                  - s3:ListAllMyBuckets
+                  - s3:GetBucketLocation
+                  - s3:GetBucketTagging
+                  - s3:ListBucketMultipartUploads
+                Resource: "*"
               
               # EC2 read access for analysis
               - Effect: Allow
@@ -151,6 +160,7 @@ Resources:
                   - ec2:DescribeSnapshots
                   - ec2:DescribeInstances
                   - ec2:DescribeInstanceStatus
+                  - autoscaling:DescribeAutoScalingGroups
                   - cloudwatch:GetMetricStatistics
                   - logs:DescribeLogGroups
                 Resource: "*"
@@ -472,6 +482,12 @@ Resources:
 
               return request
 
+  AuthEdgeLambdaVersion:
+    Type: AWS::Lambda::Version
+    Properties:
+      FunctionName: !Ref AuthEdgeLambda
+      Description: !Sub "Version for edge auth check (${AWS::StackName})"
+
   LambdaEdgeExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -481,8 +497,9 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              Service: lambda.amazonaws.com
-              AWS: arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity/*
+              Service:
+                - lambda.amazonaws.com
+                - edgelambda.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
@@ -691,7 +708,7 @@ Resources:
               Forward: none
           LambdaFunctionAssociations:
             - EventType: viewer-request
-              LambdaFunctionARN: !Ref AuthEdgeLambda
+              LambdaFunctionARN: !Ref AuthEdgeLambdaVersion
         CacheBehaviors:
           - PathPattern: login.html
             TargetOriginId: S3Origin

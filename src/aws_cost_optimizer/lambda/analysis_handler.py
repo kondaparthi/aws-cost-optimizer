@@ -131,6 +131,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         for account in accounts:
             account_id = account.get("id")
             role_arn = account.get("role_arn")
+            external_id = account.get("external_id")
             account_name = account.get("name", account_id or "local")
             
             for region in regions:
@@ -138,7 +139,13 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 
                 try:
                     # Create AWS client
-                    aws_client = AWSClient(region, lambda_logger)
+                    aws_client = AWSClient(
+                        region,
+                        lambda_logger,
+                        account_id=account_id,
+                        role_arn=role_arn,
+                        external_id=external_id,
+                    )
                     
                     # Create skip policy
                     skip_policy = SkipPolicy(config.skip_policies, lambda_logger)

@@ -58,13 +58,20 @@ def run_analysis(config_path: str, regions: Optional[List[str]] = None,
     for account in accounts:
         account_id = account.get("id")
         role_arn = account.get("role_arn")
+        external_id = account.get("external_id")
         account_name = account.get("name", account_id or "local")
         
         for region in regions_to_scan:
             print(f"\nAnalyzing {account_name} / {region}...")
             
             # Create AWS client
-            aws_client = AWSClient(region, logger)
+            aws_client = AWSClient(
+                region,
+                logger,
+                account_id=account_id,
+                role_arn=role_arn,
+                external_id=external_id,
+            )
             
             # Create skip policy
             skip_policy = SkipPolicy(config.skip_policies, logger)
