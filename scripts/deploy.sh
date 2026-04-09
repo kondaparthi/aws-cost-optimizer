@@ -43,8 +43,10 @@ Options:
   --config-bucket <bucket>      S3 bucket for configuration (required)
   --config-key <key>            S3 key for config.yaml (default: config/cost-optimizer.yaml)
   --report-bucket <bucket>      S3 bucket for reports (required)
+    --decisions-bucket <bucket>   S3 bucket for scheduler decisions (required)
   --report-prefix <prefix>      S3 prefix for reports (default: cost-reports/)
   --dashboard-bucket <bucket>   S3 bucket for dashboard (required, unique globally)
+    --cross-account-external-id <id> External ID for cross-account role trust (required)
   --admin-email <email>          Admin email for Cognito user (required)
     --vpc-subnet-ids <ids>        Comma-separated subnet IDs for Lambda VPC (required)
     --vpc-security-group-ids <ids> Comma-separated security group IDs for Lambda VPC (required)
@@ -53,7 +55,7 @@ Options:
   --analysis-schedule <cron>    EventBridge cron for analysis (default: cron(0 2 * * ? *))
   --scheduler-schedule <cron>   EventBridge cron for scheduler (default: cron(0 6,18 * * ? *))
   --lambda-timeout <seconds>    Lambda timeout (default: 900)
-  --lambda-memory <MB>          Lambda memory (default: 512)
+    --lambda-memory <MB>          Lambda memory (default: 1024)
   --help                        Show this help message
 
 Example:
@@ -71,8 +73,10 @@ STACK_NAME=""
 CONFIG_BUCKET=""
 CONFIG_KEY="config/cost-optimizer.yaml"
 REPORT_BUCKET=""
+DECISIONS_BUCKET=""
 REPORT_PREFIX="cost-reports/"
 DASHBOARD_BUCKET=""
+EXTERNAL_ID=""
 ADMIN_EMAIL=""
 EMAIL=""
 VPC_SUBNET_IDS=""
@@ -81,7 +85,7 @@ REGION="us-east-1"
 ANALYSIS_SCHEDULE="cron(0 2 * * ? *)"
 SCHEDULER_SCHEDULE="cron(0 6,18 * * ? *)"
 LAMBDA_TIMEOUT="900"
-LAMBDA_MEMORY="512"
+LAMBDA_MEMORY="1024"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -90,8 +94,10 @@ while [[ $# -gt 0 ]]; do
         --config-bucket) CONFIG_BUCKET="$2"; shift 2 ;;
         --config-key) CONFIG_KEY="$2"; shift 2 ;;
         --report-bucket) REPORT_BUCKET="$2"; shift 2 ;;
+        --decisions-bucket) DECISIONS_BUCKET="$2"; shift 2 ;;
         --report-prefix) REPORT_PREFIX="$2"; shift 2 ;;
         --dashboard-bucket) DASHBOARD_BUCKET="$2"; shift 2 ;;
+        --cross-account-external-id) EXTERNAL_ID="$2"; shift 2 ;;
         --admin-email) ADMIN_EMAIL="$2"; shift 2 ;;
         --vpc-subnet-ids) VPC_SUBNET_IDS="$2"; shift 2 ;;
         --vpc-security-group-ids) VPC_SECURITY_GROUP_IDS="$2"; shift 2 ;;
@@ -107,7 +113,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Validate required arguments
-if [ -z "$STACK_NAME" ] || [ -z "$CONFIG_BUCKET" ] || [ -z "$REPORT_BUCKET" ] || [ -z "$DASHBOARD_BUCKET" ] || [ -z "$ADMIN_EMAIL" ] || [ -z "$EMAIL" ] || [ -z "$VPC_SUBNET_IDS" ] || [ -z "$VPC_SECURITY_GROUP_IDS" ]; then
+if [ -z "$STACK_NAME" ] || [ -z "$CONFIG_BUCKET" ] || [ -z "$REPORT_BUCKET" ] || [ -z "$DECISIONS_BUCKET" ] || [ -z "$DASHBOARD_BUCKET" ] || [ -z "$EXTERNAL_ID" ] || [ -z "$ADMIN_EMAIL" ] || [ -z "$EMAIL" ] || [ -z "$VPC_SUBNET_IDS" ] || [ -z "$VPC_SECURITY_GROUP_IDS" ]; then
     log_error "Missing required arguments"
     print_usage
     exit 1
@@ -118,6 +124,7 @@ log_info "======================================"
 log_info "Stack Name: $STACK_NAME"
 log_info "Config Bucket: $CONFIG_BUCKET"
 log_info "Report Bucket: $REPORT_BUCKET"
+log_info "Decisions Bucket: $DECISIONS_BUCKET"
 log_info "Dashboard Bucket: $DASHBOARD_BUCKET"
 log_info "VPC Subnets: $VPC_SUBNET_IDS"
 log_info "VPC Security Groups: $VPC_SECURITY_GROUP_IDS"
@@ -224,8 +231,10 @@ aws cloudformation deploy \
         CodeS3Bucket="$CONFIG_BUCKET" \
         CodeS3Key="$LAMBDA_S3_KEY" \
         ReportS3Bucket="$REPORT_BUCKET" \
+        DecisionsS3Bucket="$DECISIONS_BUCKET" \
         ReportS3Prefix="$REPORT_PREFIX" \
         DashboardS3Bucket="$DASHBOARD_BUCKET" \
+        CrossAccountExternalId="$EXTERNAL_ID" \
         AdminEmail="$ADMIN_EMAIL" \
         VpcSubnetIds="$CFN_VPC_SUBNET_IDS" \
         VpcSecurityGroupIds="$CFN_VPC_SECURITY_GROUP_IDS" \
@@ -294,11 +303,19 @@ aws lambda update-function-code \
 
 log_info "Step 7.5: Uploading dashboard files to S3..."
 
-AUTH_API_URL=$(aws cloudformation describe-stacks \
+DASHBOARD_SECRET_ARN=$(aws cloudformation describe-stacks \
     --stack-name "$STACK_NAME" \
     --region "$REGION" \
-    --query "Stacks[0].Outputs[?OutputKey=='AuthApiURL'].OutputValue" \
+    --query "Stacks[0].Outputs[?OutputKey=='DashboardAccessSecretArn'].OutputValue" \
     --output text)
+
+SECRET_JSON=$(aws secretsmanager get-secret-value \
+    --secret-id "$DASHBOARD_SECRET_ARN" \
+    --region "$REGION" \
+    --query 'SecretString' \
+    --output text)
+
+AUTH_API_URL=$(echo "$SECRET_JSON" | sed -n 's/.*"auth_api_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
 
 # Replace placeholders with actual values
 sed "s|YOUR_REPORTS_BUCKET|$REPORT_BUCKET|g; s|__AUTH_API_URL__|$AUTH_API_URL/auth|g" dashboard/index.html > /tmp/index.html

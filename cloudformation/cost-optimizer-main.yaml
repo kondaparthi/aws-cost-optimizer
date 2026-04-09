@@ -5,6 +5,8 @@ Parameters:
   ConfigS3Bucket:
     Type: String
     Description: S3 bucket containing cost-optimizer config.yaml
+    AllowedPattern: '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
+    ConstraintDescription: Must be a valid S3 bucket name.
     
   ConfigS3Key:
     Type: String
@@ -14,6 +16,8 @@ Parameters:
   CodeS3Bucket:
     Type: String
     Description: S3 bucket containing Lambda deployment package
+    AllowedPattern: '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
+    ConstraintDescription: Must be a valid S3 bucket name.
 
   CodeS3Key:
     Type: String
@@ -22,6 +26,14 @@ Parameters:
   ReportS3Bucket:
     Type: String
     Description: S3 bucket for storing analysis reports
+    AllowedPattern: '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
+    ConstraintDescription: Must be a valid S3 bucket name.
+
+  DecisionsS3Bucket:
+    Type: String
+    Description: S3 bucket for storing scheduler decision artifacts
+    AllowedPattern: '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
+    ConstraintDescription: Must be a valid S3 bucket name.
   
   ReportS3Prefix:
     Type: String
@@ -31,29 +43,35 @@ Parameters:
   NotificationEmail:
     Type: String
     Description: Email address for SNS notifications
+    AllowedPattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+    ConstraintDescription: Must be a valid email address.
     
   AnalysisSchedule:
     Type: String
     Default: cron(0 2 * * ? *)
     Description: EventBridge cron schedule for analysis (default 2 AM UTC daily)
+    AllowedPattern: '^cron\(.+\)$'
+    ConstraintDescription: Must be a valid EventBridge cron expression.
   
   SchedulerSchedule:
     Type: String
     Default: cron(0 6,18 * * ? *)
     Description: EventBridge cron schedule for scheduler (default 6 AM and 6 PM UTC)
+    AllowedPattern: '^cron\(.+\)$'
+    ConstraintDescription: Must be a valid EventBridge cron expression.
   
   LambdaTimeout:
     Type: Number
     Default: 900
     MinValue: 30
     MaxValue: 900
-    Description: Lambda timeout in seconds
+    Description: Lambda timeout in seconds (900 recommended for multi-account scans; use Step Functions for workloads over 15 minutes)
   
   LambdaMemory:
     Type: Number
-    Default: 512
-    AllowedValues: [128, 256, 512, 1024, 1536, 2048]
-    Description: Lambda memory allocation in MB
+    Default: 1024
+    AllowedValues: [1024, 1536, 2048, 3008]
+    Description: Lambda memory allocation in MB (1024 minimum recommended for multi-account scans)
 
   VpcSubnetIds:
     Type: List<AWS::EC2::Subnet::Id>
@@ -66,10 +84,23 @@ Parameters:
   DashboardS3Bucket:
     Type: String
     Description: S3 bucket for hosting the dashboard (must be unique globally)
+    AllowedPattern: '^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
+    ConstraintDescription: Must be a valid S3 bucket name.
 
   AdminEmail:
     Type: String
     Description: Administrator email used for Cognito user provisioning workflows
+    AllowedPattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+    ConstraintDescription: Must be a valid email address.
+
+  CrossAccountExternalId:
+    Type: String
+    Description: External ID used for cross-account role assumption
+    NoEcho: true
+    MinLength: 12
+    MaxLength: 128
+    AllowedPattern: '^[A-Za-z0-9+=,.@:/_-]+$'
+    ConstraintDescription: Must be 12-128 chars using IAM ExternalId-compatible characters.
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -82,6 +113,7 @@ Metadata:
           - CodeS3Bucket
           - CodeS3Key
           - ReportS3Bucket
+          - DecisionsS3Bucket
           - ReportS3Prefix
       - Label:
           default: Notifications
@@ -113,6 +145,31 @@ Resources:
         - Endpoint: !Ref NotificationEmail
           Protocol: email
 
+  CostOptimizerTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref CostOptimizerTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowOnlyOptimizerLambdaRolesToPublish
+            Effect: Allow
+            Principal:
+              AWS:
+                - !GetAtt LambdaExecutionRole.Arn
+                - !GetAtt AuthLambdaExecutionRole.Arn
+            Action: sns:Publish
+            Resource: !GetAtt CostOptimizerTopic.TopicArn
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: sns:Publish
+            Resource: !GetAtt CostOptimizerTopic.TopicArn
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
   # ========================================================================
   # IAM Roles for Lambdas
   # ========================================================================
@@ -143,15 +200,19 @@ Resources:
                 Resource:
                   - !Sub "arn:aws:s3:::${ConfigS3Bucket}/*"
                   - !Sub "arn:aws:s3:::${ReportS3Bucket}/*"
+                  - !Sub "arn:aws:s3:::${DecisionsS3Bucket}/*"
 
               # S3 metadata/list access required by analyzers
               - Effect: Allow
                 Action:
-                  - s3:ListAllMyBuckets
+                  - s3:ListBucket
                   - s3:GetBucketLocation
                   - s3:GetBucketTagging
                   - s3:ListBucketMultipartUploads
-                Resource: "*"
+                Resource:
+                  - !Sub "arn:aws:s3:::${ConfigS3Bucket}"
+                  - !Sub "arn:aws:s3:::${ReportS3Bucket}"
+                  - !Sub "arn:aws:s3:::${DecisionsS3Bucket}"
               
               # EC2 read access for analysis
               - Effect: Allow
@@ -171,6 +232,19 @@ Resources:
                   - ec2:StartInstances
                   - ec2:StopInstances
                 Resource: !Sub "arn:${AWS::Partition}:ec2:*:${AWS::AccountId}:instance/*"
+
+              - Effect: Allow
+                Action:
+                  - ec2:DeleteSnapshot
+                  - ec2:DeleteVolume
+                Resource: "*"
+                Condition:
+                  StringEqualsIfExists:
+                    ec2:ResourceTag/CostOptimizerProtected: "false"
+                  StringNotEqualsIfExists:
+                    ec2:ResourceTag/Environment:
+                      - prod
+                      - production
               
               # SNS for notifications
               - Effect: Allow
@@ -189,6 +263,9 @@ Resources:
                 Action:
                   - sts:AssumeRole
                 Resource: !Sub "arn:${AWS::Partition}:iam::*:role/CostOptimizerRole"
+                Condition:
+                  StringEquals:
+                    sts:ExternalId: !Ref CrossAccountExternalId
 
   # ========================================================================
   # Lambda Layer with Framework Code
@@ -203,6 +280,8 @@ Resources:
   
   AnalysisLambdaFunction:
     Type: AWS::Lambda::Function
+    DependsOn:
+      - AnalysisLogGroup
     Properties:
       FunctionName: cost-optimizer-analysis
       Runtime: python3.11
@@ -218,6 +297,7 @@ Resources:
           CONFIG_S3_BUCKET: !Ref ConfigS3Bucket
           CONFIG_S3_KEY: !Ref ConfigS3Key
           REPORT_S3_BUCKET: !Ref ReportS3Bucket
+          DECISIONS_S3_BUCKET: !Ref DecisionsS3Bucket
           REPORT_S3_PREFIX: !Ref ReportS3Prefix
           SNS_TOPIC_ARN: !GetAtt CostOptimizerTopic.TopicArn
           DRY_RUN: "false"
@@ -236,6 +316,8 @@ Resources:
   
   SchedulerLambdaFunction:
     Type: AWS::Lambda::Function
+    DependsOn:
+      - SchedulerLogGroup
     Properties:
       FunctionName: cost-optimizer-scheduler
       Runtime: python3.11
@@ -250,6 +332,7 @@ Resources:
         Variables:
           TIMEZONE: UTC
           DRY_RUN: "false"
+          DECISIONS_S3_BUCKET: !Ref DecisionsS3Bucket
           SNS_TOPIC_ARN: !GetAtt CostOptimizerTopic.TopicArn
       Code:
         S3Bucket: !Ref CodeS3Bucket
@@ -274,6 +357,11 @@ Resources:
       Targets:
         - Arn: !GetAtt AnalysisLambdaFunction.Arn
           Id: CostOptimizerAnalysisTarget
+          DeadLetterConfig:
+            Arn: !GetAtt AnalysisFailureQueue.Arn
+          RetryPolicy:
+            MaximumRetryAttempts: 2
+            MaximumEventAgeInSeconds: 3600
 
   AnalysisEventPermission:
     Type: AWS::Lambda::Permission
@@ -305,18 +393,69 @@ Resources:
   # ========================================================================
   # CloudWatch Log Groups
   # ========================================================================
+
+  LogsKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for encrypted CloudWatch Logs
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowRootAccountAdmin
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: AllowCloudWatchLogsUse
+            Effect: Allow
+            Principal:
+              Service: !Sub "logs.${AWS::Region}.amazonaws.com"
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: '*'
+
+  LogsKmsAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${AWS::StackName}-cw-logs"
+      TargetKeyId: !Ref LogsKmsKey
   
   AnalysisLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: /aws/lambda/cost-optimizer-analysis
-      RetentionInDays: 30
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt LogsKmsKey.Arn
 
   SchedulerLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: /aws/lambda/cost-optimizer-scheduler
-      RetentionInDays: 30
+      RetentionInDays: 90
+      KmsKeyId: !GetAtt LogsKmsKey.Arn
+
+  AnalysisFailureQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-analysis-failures"
+      KmsMasterKeyId: alias/aws/sqs
+      MessageRetentionPeriod: 1209600
+
+  AnalysisErrorMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AnalysisLogGroup
+      FilterPattern: '"ERROR"'
+      MetricTransformations:
+        - MetricValue: '1'
+          MetricNamespace: CostOptimizer
+          MetricName: AnalysisErrorCount
 
   # ========================================================================
   # CloudWatch Alarms
@@ -358,6 +497,119 @@ Resources:
       AlarmActions:
         - !GetAtt CostOptimizerTopic.TopicArn
 
+  AnalysisStructuredErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-Analysis-Structured-Errors"
+      AlarmDescription: Alarm on ERROR log entries from analysis Lambda
+      Namespace: CostOptimizer
+      MetricName: AnalysisErrorCount
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !GetAtt CostOptimizerTopic.TopicArn
+
+  AnalysisFailureQueueAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-Analysis-DLQ-Messages"
+      AlarmDescription: Alarm when EventBridge delivery failures accumulate in analysis DLQ
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt AnalysisFailureQueue.QueueName
+      AlarmActions:
+        - !GetAtt CostOptimizerTopic.TopicArn
+
+  # ========================================================================
+  # Managed Findings/Decisions Buckets
+  # ========================================================================
+
+  FindingsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref ReportS3Bucket
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldFindings
+            Status: Enabled
+            ExpirationInDays: 90
+
+  DecisionsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref DecisionsS3Bucket
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldDecisions
+            Status: Enabled
+            ExpirationInDays: 90
+
+  FindingsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FindingsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowLambdaRoleReadWriteFindings
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt LambdaExecutionRole.Arn
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource: !Sub "arn:aws:s3:::${ReportS3Bucket}/*"
+
+  DecisionsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DecisionsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowLambdaRoleReadWriteDecisions
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt LambdaExecutionRole.Arn
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource: !Sub "arn:aws:s3:::${DecisionsS3Bucket}/*"
+
   # ========================================================================
   # S3 Bucket for Dashboard
   # ========================================================================
@@ -381,18 +633,56 @@ Resources:
         IndexDocument: index.html
         ErrorDocument: error.html
 
+  DashboardLogsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${DashboardS3Bucket}-logs"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  DashboardLogsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DashboardLogsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontLogsWrite
+            Effect: Allow
+            Principal:
+              Service: delivery.logs.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub "arn:aws:s3:::${DashboardS3Bucket}-logs/cloudfront/*"
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+          - Sid: AllowCloudFrontLogsAclCheck
+            Effect: Allow
+            Principal:
+              Service: delivery.logs.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !Sub "arn:aws:s3:::${DashboardS3Bucket}-logs"
+
   DashboardBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
       Bucket: !Ref DashboardBucket
       PolicyDocument:
+        Version: '2012-10-17'
         Statement:
           - Sid: AllowCloudFrontAccess
             Effect: Allow
             Principal:
               AWS: !Sub "arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${CloudFrontOriginAccessIdentity}"
             Action: s3:GetObject
-            Resource: !Sub "${DashboardBucket}/*"
+            Resource: !Sub "arn:aws:s3:::${DashboardS3Bucket}/*"
 
   # ========================================================================
   # Cognito User Pool for Authentication
@@ -406,11 +696,16 @@ Resources:
         AdminEmail: !Ref AdminEmail
       Policies:
         PasswordPolicy:
-          MinimumLength: 8
+          MinimumLength: 14
           RequireUppercase: true
           RequireLowercase: true
           RequireNumbers: true
-          RequireSymbols: false
+          RequireSymbols: true
+      MfaConfiguration: OPTIONAL
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
       AutoVerifiedAttributes:
         - email
       UsernameAttributes:
@@ -423,8 +718,16 @@ Resources:
       ClientName: cost-optimizer-dashboard-client
       GenerateSecret: false
       ExplicitAuthFlows:
-        - ADMIN_NO_SRP_AUTH
-        - ALLOW_USER_SRP_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      RefreshTokenValidity: 30
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+      PreventUserExistenceErrors: LEGACY
       SupportedIdentityProviders:
         - COGNITO
 
@@ -487,6 +790,42 @@ Resources:
     Properties:
       FunctionName: !Ref AuthEdgeLambda
       Description: !Sub "Version for edge auth check (${AWS::StackName})"
+
+  SecurityHeadersEdgeLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: cost-optimizer-security-headers
+      Runtime: python3.11
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt LambdaEdgeExecutionRole.Arn
+      Code:
+        ZipFile: |
+          def lambda_handler(event, context):
+              response = event['Records'][0]['cf']['response']
+              headers = response.setdefault('headers', {})
+              headers['strict-transport-security'] = [{
+                  'key': 'Strict-Transport-Security',
+                  'value': 'max-age=63072000; includeSubDomains; preload'
+              }]
+              headers['x-frame-options'] = [{
+                  'key': 'X-Frame-Options',
+                  'value': 'DENY'
+              }]
+              headers['x-content-type-options'] = [{
+                  'key': 'X-Content-Type-Options',
+                  'value': 'nosniff'
+              }]
+              headers['content-security-policy'] = [{
+                  'key': 'Content-Security-Policy',
+                  'value': "default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+              }]
+              return response
+
+  SecurityHeadersEdgeLambdaVersion:
+    Type: AWS::Lambda::Version
+    Properties:
+      FunctionName: !Ref SecurityHeadersEdgeLambda
+      Description: !Sub "Version for edge security headers (${AWS::StackName})"
 
   LambdaEdgeExecutionRole:
     Type: AWS::IAM::Role
@@ -681,11 +1020,18 @@ Resources:
 
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
+    DependsOn:
+      - DashboardBucketPolicy
+      - DashboardLogsBucketPolicy
     Properties:
       DistributionConfig:
         Comment: Cost Optimizer Dashboard
         DefaultRootObject: index.html
         Enabled: true
+        Logging:
+          Bucket: !GetAtt DashboardLogsBucket.DomainName
+          IncludeCookies: false
+          Prefix: cloudfront/
         Origins:
           - DomainName: !GetAtt DashboardBucket.RegionalDomainName
             Id: S3Origin
@@ -709,6 +1055,8 @@ Resources:
           LambdaFunctionAssociations:
             - EventType: viewer-request
               LambdaFunctionARN: !Ref AuthEdgeLambdaVersion
+            - EventType: viewer-response
+              LambdaFunctionARN: !Ref SecurityHeadersEdgeLambdaVersion
         CacheBehaviors:
           - PathPattern: login.html
             TargetOriginId: S3Origin
@@ -730,6 +1078,17 @@ Resources:
             CachedMethods: [GET, HEAD, OPTIONS]
         PriceClass: PriceClass_100
         HttpVersion: http2
+
+  DashboardAccessSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${AWS::StackName}/dashboard/access"
+      Description: Dashboard and auth API endpoints for Cost Optimizer
+      SecretString: !Sub |
+        {
+          "dashboard_url": "https://${CloudFrontDistribution.DomainName}",
+          "auth_api_url": "https://${AuthApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod"
+        }
 
 Outputs:
   AnalysisLambdaFunctionArn:
@@ -768,17 +1127,11 @@ Outputs:
     Export:
       Name: !Sub "${AWS::StackName}-SchedulerLogGroup"
 
-  DashboardURL:
-    Description: Secure CloudFront URL for the dashboard
-    Value: !Sub "https://${CloudFrontDistribution.DomainName}"
+  DashboardAccessSecretArn:
+    Description: Secrets Manager ARN containing dashboard and auth API endpoints
+    Value: !Ref DashboardAccessSecret
     Export:
-      Name: !Sub "${AWS::StackName}-DashboardURL"
-
-  AuthApiURL:
-    Description: API Gateway URL for authentication endpoints
-    Value: !Sub "https://${AuthApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod"
-    Export:
-      Name: !Sub "${AWS::StackName}-AuthApiURL"
+      Name: !Sub "${AWS::StackName}-DashboardAccessSecretArn"
 
   CognitoUserPoolId:
     Description: Cognito User Pool ID
@@ -800,14 +1153,6 @@ Outputs:
     Description: Scheduler schedule (EventBridge cron)
     Value: !Ref SchedulerSchedule
 
-  ConfigLocation:
-    Description: S3 location of configuration file
-    Value: !Sub "s3://${ConfigS3Bucket}/${ConfigS3Key}"
-
-  ReportLocation:
-    Description: S3 location for reports
-    Value: !Sub "s3://${ReportS3Bucket}/${ReportS3Prefix}"
-
   DeploymentInstructions:
     Description: Next steps for deployment
-    Value: !Sub "1) Upload Lambda package to s3://${CodeS3Bucket}/${CodeS3Key}\n2) Configure config.yaml in S3\n3) Verify SNS subscription in email\n4) Monitor via CloudWatch Dashboard"
+    Value: !Sub "1) Upload Lambda package to s3://${CodeS3Bucket}/${CodeS3Key}\n2) Configure config.yaml in s3://${ConfigS3Bucket}/${ConfigS3Key}\n3) Retrieve URLs from Secrets Manager: ${DashboardAccessSecret}\n4) Verify SNS subscription in email and monitor CloudWatch alarms"

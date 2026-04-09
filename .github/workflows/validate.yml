@@ -1,0 +1,52 @@
+name: Validate CloudFormation
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - cloudformation/**
+      - .github/workflows/validate.yml
+  push:
+    branches: [ main, develop ]
+    paths:
+      - cloudformation/**
+      - .github/workflows/validate.yml
+
+jobs:
+  cfn-validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install validation tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install cfn-lint
+
+      - name: cfn-lint
+        run: |
+          cfn-lint cloudformation/cost-optimizer-main.yaml
+          cfn-lint cloudformation/cost-optimizer-cross-account.yaml
+
+      - name: Configure AWS credentials
+        if: ${{ secrets.AWS_ROLE_TO_ASSUME != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: us-east-1
+
+      - name: validate-template API
+        if: ${{ secrets.AWS_ROLE_TO_ASSUME != '' }}
+        run: |
+          aws cloudformation validate-template --template-body file://cloudformation/cost-optimizer-main.yaml
+          aws cloudformation validate-template --template-body file://cloudformation/cost-optimizer-cross-account.yaml

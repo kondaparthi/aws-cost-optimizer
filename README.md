@@ -110,7 +110,9 @@ One-time setup (5 minutes):
 ./deploy.sh --stack-name cost-optimizer \
   --config-bucket my-config \
   --report-bucket my-reports \
+  --decisions-bucket my-decisions \
   --dashboard-bucket my-dashboard-12345 \
+  --cross-account-external-id cost-optimizer-external-id-123 \
   --admin-email admin@company.com \
   --email ops@company.com
 ```

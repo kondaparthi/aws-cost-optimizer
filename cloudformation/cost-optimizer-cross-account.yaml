@@ -2,10 +2,23 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: 'AWS Cost Optimizer - Multi-Account Cross-Account Role Setup'
 
 Parameters:
-  CentralAccountId:
+  HubLambdaExecutionRoleArn:
     Type: String
-    Description: AWS Account ID where Cost Optimizer Lambdas are deployed
-    AllowedPattern: '^\d{12}$'
+    Description: ARN of the central account Lambda execution role allowed to assume this role
+    AllowedPattern: '^arn:aws(-[a-z]+)?:iam::\d{12}:role\/.+$'
+
+  HubAnalysisLambdaArn:
+    Type: String
+    Description: ARN of the central account analysis Lambda function
+    AllowedPattern: '^arn:aws(-[a-z]+)?:lambda:[a-z0-9-]+:\d{12}:function:.+$'
+
+  ExternalId:
+    Type: String
+    Description: Shared external ID required for sts:AssumeRole
+    NoEcho: true
+    MinLength: 12
+    MaxLength: 128
+    AllowedPattern: '^[A-Za-z0-9+=,.@:/_-]+$'
   
   RoleName:
     Type: String
@@ -18,7 +31,9 @@ Metadata:
       - Label:
           default: Multi-Account Configuration
         Parameters:
-          - CentralAccountId
+          - HubLambdaExecutionRoleArn
+          - HubAnalysisLambdaArn
+          - ExternalId
           - RoleName
 
 Resources:
@@ -36,11 +51,13 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Sub "arn:aws:iam::${CentralAccountId}:root"
+              AWS: !Ref HubLambdaExecutionRoleArn
             Action: sts:AssumeRole
             Condition:
               StringEquals:
-                sts:ExternalId: !Sub "cost-optimizer-${AWS::AccountId}"
+                sts:ExternalId: !Ref ExternalId
+              ArnLike:
+                aws:SourceArn: !Ref HubAnalysisLambdaArn
       Tags:
         - Key: Application
           Value: CostOptimizer
@@ -155,12 +172,6 @@ Outputs:
     Value: !GetAtt CostOptimizerCrossAccountRole.Arn
     Export:
       Name: !Sub "${AWS::StackName}-RoleArn"
-  
-  ExternalId:
-    Description: External ID for role assumption
-    Value: !Sub "cost-optimizer-${AWS::AccountId}"
-    Export:
-      Name: !Sub "${AWS::StackName}-ExternalId"
   
   ConfigSnippet:
     Description: Add this to your cost-optimizer config.yaml

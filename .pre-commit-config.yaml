@@ -1,0 +1,14 @@
+repos:
+  - repo: https://github.com/awslabs/cfn-python-lint
+    rev: v1.39.1
+    hooks:
+      - id: cfn-python-lint
+        files: ^cloudformation/.*\.ya?ml$
+
+  - repo: local
+    hooks:
+      - id: validate-cfn-templates
+        name: validate CloudFormation templates (cfn-lint)
+        entry: bash -c 'cfn-lint cloudformation/cost-optimizer-main.yaml cloudformation/cost-optimizer-cross-account.yaml'
+        language: system
+        pass_filenames: false
