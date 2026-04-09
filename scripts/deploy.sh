@@ -46,6 +46,8 @@ Options:
   --report-prefix <prefix>      S3 prefix for reports (default: cost-reports/)
   --dashboard-bucket <bucket>   S3 bucket for dashboard (required, unique globally)
   --admin-email <email>          Admin email for Cognito user (required)
+    --vpc-subnet-ids <ids>        Comma-separated subnet IDs for Lambda VPC (required)
+    --vpc-security-group-ids <ids> Comma-separated security group IDs for Lambda VPC (required)
   --email <email>               Email for SNS notifications (required)
   --region <region>             AWS region (default: us-east-1)
   --analysis-schedule <cron>    EventBridge cron for analysis (default: cron(0 2 * * ? *))
@@ -73,6 +75,8 @@ REPORT_PREFIX="cost-reports/"
 DASHBOARD_BUCKET=""
 ADMIN_EMAIL=""
 EMAIL=""
+VPC_SUBNET_IDS=""
+VPC_SECURITY_GROUP_IDS=""
 REGION="us-east-1"
 ANALYSIS_SCHEDULE="cron(0 2 * * ? *)"
 SCHEDULER_SCHEDULE="cron(0 6,18 * * ? *)"
@@ -89,6 +93,8 @@ while [[ $# -gt 0 ]]; do
         --report-prefix) REPORT_PREFIX="$2"; shift 2 ;;
         --dashboard-bucket) DASHBOARD_BUCKET="$2"; shift 2 ;;
         --admin-email) ADMIN_EMAIL="$2"; shift 2 ;;
+        --vpc-subnet-ids) VPC_SUBNET_IDS="$2"; shift 2 ;;
+        --vpc-security-group-ids) VPC_SECURITY_GROUP_IDS="$2"; shift 2 ;;
         --email) EMAIL="$2"; shift 2 ;;
         --region) REGION="$2"; shift 2 ;;
         --analysis-schedule) ANALYSIS_SCHEDULE="$2"; shift 2 ;;
@@ -101,7 +107,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Validate required arguments
-if [ -z "$STACK_NAME" ] || [ -z "$CONFIG_BUCKET" ] || [ -z "$REPORT_BUCKET" ] || [ -z "$DASHBOARD_BUCKET" ] || [ -z "$ADMIN_EMAIL" ] || [ -z "$EMAIL" ]; then
+if [ -z "$STACK_NAME" ] || [ -z "$CONFIG_BUCKET" ] || [ -z "$REPORT_BUCKET" ] || [ -z "$DASHBOARD_BUCKET" ] || [ -z "$ADMIN_EMAIL" ] || [ -z "$EMAIL" ] || [ -z "$VPC_SUBNET_IDS" ] || [ -z "$VPC_SECURITY_GROUP_IDS" ]; then
     log_error "Missing required arguments"
     print_usage
     exit 1
@@ -113,7 +119,12 @@ log_info "Stack Name: $STACK_NAME"
 log_info "Config Bucket: $CONFIG_BUCKET"
 log_info "Report Bucket: $REPORT_BUCKET"
 log_info "Dashboard Bucket: $DASHBOARD_BUCKET"
+log_info "VPC Subnets: $VPC_SUBNET_IDS"
+log_info "VPC Security Groups: $VPC_SECURITY_GROUP_IDS"
 log_info "Region: $REGION"
+
+CFN_VPC_SUBNET_IDS="$(echo "$VPC_SUBNET_IDS" | sed 's/,/\\,/g')"
+CFN_VPC_SECURITY_GROUP_IDS="$(echo "$VPC_SECURITY_GROUP_IDS" | sed 's/,/\\,/g')"
 
 # ========================================================================
 # Step 1: Validate prerequisites
@@ -210,10 +221,14 @@ aws cloudformation deploy \
     --parameter-overrides \
         ConfigS3Bucket="$CONFIG_BUCKET" \
         ConfigS3Key="$CONFIG_KEY" \
+        CodeS3Bucket="$CONFIG_BUCKET" \
+        CodeS3Key="$LAMBDA_S3_KEY" \
         ReportS3Bucket="$REPORT_BUCKET" \
         ReportS3Prefix="$REPORT_PREFIX" \
         DashboardS3Bucket="$DASHBOARD_BUCKET" \
         AdminEmail="$ADMIN_EMAIL" \
+        VpcSubnetIds="$CFN_VPC_SUBNET_IDS" \
+        VpcSecurityGroupIds="$CFN_VPC_SECURITY_GROUP_IDS" \
         NotificationEmail="$EMAIL" \
         AnalysisSchedule="$ANALYSIS_SCHEDULE" \
         SchedulerSchedule="$SCHEDULER_SCHEDULE" \
@@ -243,6 +258,12 @@ SCHEDULER_LAMBDA=$(aws cloudformation describe-stacks \
     --query "Stacks[0].Outputs[?OutputKey=='SchedulerLambdaFunctionArn'].OutputValue" \
     --output text | xargs -I {} basename {} | cut -d: -f6)
 
+AUTH_LAMBDA=$(aws cloudformation describe-stacks \
+    --stack-name "$STACK_NAME" \
+    --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='AuthLambdaFunctionArn'].OutputValue" \
+    --output text | xargs -I {} basename {} | cut -d: -f6)
+
 log_info "Updating $ANALYSIS_LAMBDA with code..."
 aws lambda update-function-code \
     --function-name "$ANALYSIS_LAMBDA" \
@@ -259,14 +280,29 @@ aws lambda update-function-code \
     --region "$REGION" \
     > /dev/null
 
+log_info "Updating $AUTH_LAMBDA with code..."
+aws lambda update-function-code \
+    --function-name "$AUTH_LAMBDA" \
+    --s3-bucket "$CONFIG_BUCKET" \
+    --s3-key "$LAMBDA_S3_KEY" \
+    --region "$REGION" \
+    > /dev/null
+
 # ========================================================================
 # Step 7.5: Upload Dashboard Files
 # ========================================================================
 
 log_info "Step 7.5: Uploading dashboard files to S3..."
 
-# Replace placeholder with actual report bucket
-sed "s/YOUR_REPORTS_BUCKET/$REPORT_BUCKET/g" dashboard/index.html > /tmp/index.html
+AUTH_API_URL=$(aws cloudformation describe-stacks \
+    --stack-name "$STACK_NAME" \
+    --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='AuthApiURL'].OutputValue" \
+    --output text)
+
+# Replace placeholders with actual values
+sed "s|YOUR_REPORTS_BUCKET|$REPORT_BUCKET|g; s|__AUTH_API_URL__|$AUTH_API_URL/auth|g" dashboard/index.html > /tmp/index.html
+sed "s|__AUTH_API_URL__|$AUTH_API_URL/auth|g" dashboard/login.html > /tmp/login.html
 
 aws s3 cp /tmp/index.html "s3://$DASHBOARD_BUCKET/index.html" \
     --region "$REGION" \
@@ -274,13 +310,48 @@ aws s3 cp /tmp/index.html "s3://$DASHBOARD_BUCKET/index.html" \
     --cache-control "max-age=300" \
     --quiet
 
-aws s3 cp dashboard/login.html "s3://$DASHBOARD_BUCKET/login.html" \
+aws s3 cp /tmp/login.html "s3://$DASHBOARD_BUCKET/login.html" \
     --region "$REGION" \
     --content-type "text/html" \
     --cache-control "max-age=300" \
     --quiet
 
 log_info "Dashboard files uploaded to s3://$DASHBOARD_BUCKET/"
+
+# ========================================================================
+# Step 7.6: Bootstrap Cognito Group and Admin User
+# ========================================================================
+
+log_info "Step 7.6: Bootstrapping Cognito users..."
+
+COGNITO_USER_POOL_ID=$(aws cloudformation describe-stacks \
+    --stack-name "$STACK_NAME" \
+    --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='CognitoUserPoolId'].OutputValue" \
+    --output text)
+
+aws cognito-idp create-group \
+    --group-name dashboard-users \
+    --user-pool-id "$COGNITO_USER_POOL_ID" \
+    --region "$REGION" \
+    > /dev/null 2>&1 || true
+
+ADMIN_TEMP_PASSWORD="ChangeMe$(date +%s)!A1"
+
+aws cognito-idp admin-create-user \
+    --user-pool-id "$COGNITO_USER_POOL_ID" \
+    --username "$ADMIN_EMAIL" \
+    --temporary-password "$ADMIN_TEMP_PASSWORD" \
+    --message-action SUPPRESS \
+    --region "$REGION" \
+    > /dev/null 2>&1 || true
+
+aws cognito-idp admin-add-user-to-group \
+    --user-pool-id "$COGNITO_USER_POOL_ID" \
+    --username "$ADMIN_EMAIL" \
+    --group-name dashboard-users \
+    --region "$REGION" \
+    > /dev/null 2>&1 || true
 
 # ========================================================================
 # Step 8: Verify deployment
@@ -334,8 +405,9 @@ log_info "     (Check your email for confirmation link)"
 log_info ""
 log_info "  3. Access the secure dashboard:"
 log_info "     $DASHBOARD_URL"
-log_info "     Username: admin"
-log_info "     Password: CHANGE_THIS_PASSWORD (update in Lambda@Edge)"
+log_info "     Admin user: $ADMIN_EMAIL"
+log_info "     Temporary password: $ADMIN_TEMP_PASSWORD"
+log_info "     You will be prompted to set a new password on first login"
 log_info ""
 log_info "  4. View CloudWatch Dashboard:"
 log_info "     https://console.aws.amazon.com/cloudwatch/home?region=$REGION#dashboards:name=CostOptimizerMetrics"

@@ -467,44 +467,102 @@
     </div>
 
     <script>
-        // Check authentication
-        function checkAuth() {
-            const authCookie = document.cookie.split(';').find(c => c.trim().startsWith('auth='));
-            if (!authCookie) {
-                window.location.href = '/login.html';
+        const RAW_AUTH_API_URL = '__AUTH_API_URL__';
+
+        // Configuration - these should be set from CloudFormation outputs
+        const CONFIG = {
+            AUTH_API_URL: RAW_AUTH_API_URL.includes('__AUTH_API_URL__')
+                ? window.location.origin + '/auth'
+                : RAW_AUTH_API_URL,
+            LOGIN_URL: '/login.html'
+        };
+
+        // Global user info
+        let currentUser = null;
+        let allFindings = [];
+        let userActions = {};
+        const reportsBucket = 'YOUR_REPORTS_BUCKET'; // Replaced by deploy script
+
+        // Check authentication with Cognito
+        async function checkAuth() {
+            try {
+                const response = await fetch(`${CONFIG.AUTH_API_URL}/validate`, {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    currentUser = data.user;
+                    updateUserDisplay();
+                    return true;
+                } else {
+                    // Not authenticated, redirect to login
+                    window.location.href = CONFIG.LOGIN_URL;
+                    return false;
+                }
+            } catch (error) {
+                console.error('Auth validation error:', error);
+                // On network error, redirect to login
+                window.location.href = CONFIG.LOGIN_URL;
                 return false;
             }
-            return true;
         }
 
         // Logout function
-        function logout() {
-            document.cookie = 'auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-            window.location.href = '/login.html';
+        async function logout() {
+            try {
+                await fetch(`${CONFIG.AUTH_API_URL}/logout`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+
+            // Always redirect to login regardless of API response
+            window.location.href = CONFIG.LOGIN_URL;
         }
 
-        if (!checkAuth()) {
-            // Will redirect in checkAuth
-        } else {
-            // Continue with dashboard logic
-            let allFindings = [];
-            let userActions = {};
-            const reportsBucket = 'YOUR_REPORTS_BUCKET'; // Set by CloudFormation
-
-            // Load findings from S3
-            async function loadFindings() {
-                try {
-                    const response = await fetch(`https://s3.amazonaws.com/${reportsBucket}/findings-latest.json`);
-                    const data = await response.json();
-                    allFindings = data.findings || [];
-                    
-                    updateSummary();
-                    renderFindings();
-                    loadUserActions();
-                } catch (error) {
-                    showError('Failed to load findings: ' + error.message);
+        // Update user display in the UI
+        function updateUserDisplay() {
+            if (currentUser) {
+                // Add user info to header if needed
+                const header = document.querySelector('header');
+                if (header) {
+                    const userInfo = document.createElement('div');
+                    userInfo.className = 'user-info';
+                    userInfo.innerHTML = `
+                        <span>Welcome, ${currentUser.username || currentUser.email}</span>
+                        <button onclick="logout()" class="logout-btn">Logout</button>
+                    `;
+                    userInfo.style.cssText = `
+                        position: absolute;
+                        top: 20px;
+                        right: 30px;
+                        color: white;
+                        font-size: 0.9em;
+                    `;
+                    header.style.position = 'relative';
+                    header.appendChild(userInfo);
                 }
             }
+        }
+
+        // Load findings from S3
+        async function loadFindings() {
+            try {
+                const response = await fetch(`https://s3.amazonaws.com/${reportsBucket}/findings-latest.json`);
+                const data = await response.json();
+                allFindings = data.findings || [];
+
+                updateSummary();
+                renderFindings();
+                loadUserActions();
+            } catch (error) {
+                showError('Failed to load findings: ' + error.message);
+            }
+        }
 
         function updateSummary() {
             const total = allFindings.length;
@@ -670,13 +728,20 @@
             setTimeout(() => div.remove(), 3000);
         }
 
-        // Load on page load
-        document.addEventListener('DOMContentLoaded', loadFindings);
+        async function initDashboard() {
+            const isAuthenticated = await checkAuth();
+            if (!isAuthenticated) {
+                return;
+            }
 
-        // Add filter listeners
-        document.getElementById('typeFilter').addEventListener('change', renderFindings);
-        document.getElementById('severityFilter').addEventListener('change', renderFindings);
-        document.getElementById('statusFilter').addEventListener('change', renderFindings);
+            await loadFindings();
+
+            document.getElementById('typeFilter').addEventListener('change', renderFindings);
+            document.getElementById('severityFilter').addEventListener('change', renderFindings);
+            document.getElementById('statusFilter').addEventListener('change', renderFindings);
+        }
+
+        document.addEventListener('DOMContentLoaded', initDashboard);
     </script>
 </body>
 </html>

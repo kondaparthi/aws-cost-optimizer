@@ -10,6 +10,14 @@ Parameters:
     Type: String
     Default: config/cost-optimizer.yaml
     Description: S3 key for config.yaml file
+
+  CodeS3Bucket:
+    Type: String
+    Description: S3 bucket containing Lambda deployment package
+
+  CodeS3Key:
+    Type: String
+    Description: S3 key for Lambda deployment package zip
   
   ReportS3Bucket:
     Type: String
@@ -47,9 +55,21 @@ Parameters:
     AllowedValues: [128, 256, 512, 1024, 1536, 2048]
     Description: Lambda memory allocation in MB
 
+  VpcSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: List of subnet IDs for Lambda VPC configuration
+
+  VpcSecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: List of security group IDs for Lambda VPC configuration
+
   DashboardS3Bucket:
     Type: String
     Description: S3 bucket for hosting the dashboard (must be unique globally)
+
+  AdminEmail:
+    Type: String
+    Description: Administrator email used for Cognito user provisioning workflows
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -59,6 +79,8 @@ Metadata:
         Parameters:
           - ConfigS3Bucket
           - ConfigS3Key
+          - CodeS3Bucket
+          - CodeS3Key
           - ReportS3Bucket
           - ReportS3Prefix
       - Label:
@@ -86,6 +108,7 @@ Resources:
     Properties:
       DisplayName: AWS Cost Optimizer Notifications
       TopicName: aws-cost-optimizer-notifications
+      KmsMasterKeyId: alias/aws/sns
       Subscription:
         - Endpoint: !Ref NotificationEmail
           Protocol: email
@@ -129,7 +152,7 @@ Resources:
                   - ec2:DescribeInstances
                   - ec2:DescribeInstanceStatus
                   - cloudwatch:GetMetricStatistics
-                  - cloudwatch:DescribeLogGroups
+                  - logs:DescribeLogGroups
                 Resource: "*"
               
               # EC2 start/stop for scheduler
@@ -137,7 +160,7 @@ Resources:
                 Action:
                   - ec2:StartInstances
                   - ec2:StopInstances
-                Resource: !Sub "arn:aws:ec2:*:${AWS::AccountId}:instance/*"
+                Resource: !Sub "arn:${AWS::Partition}:ec2:*:${AWS::AccountId}:instance/*"
               
               # SNS for notifications
               - Effect: Allow
@@ -149,13 +172,13 @@ Resources:
               - Effect: Allow
                 Action:
                   - ssm:GetParameter
-                Resource: !Sub "arn:aws:ssm:*:${AWS::AccountId}:parameter/cost-optimizer/*"
+                Resource: !Sub "arn:${AWS::Partition}:ssm:*:${AWS::AccountId}:parameter/cost-optimizer/*"
               
               # Cross-account role assumption (for multi-account)
               - Effect: Allow
                 Action:
                   - sts:AssumeRole
-                Resource: "arn:aws:iam::*:role/CostOptimizerRole"
+                Resource: !Sub "arn:${AWS::Partition}:iam::*:role/CostOptimizerRole"
 
   # ========================================================================
   # Lambda Layer with Framework Code
@@ -177,6 +200,9 @@ Resources:
       Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: !Ref LambdaTimeout
       MemorySize: !Ref LambdaMemory
+      VpcConfig:
+        SecurityGroupIds: !Ref VpcSecurityGroupIds
+        SubnetIds: !Ref VpcSubnetIds
       Environment:
         Variables:
           CONFIG_S3_BUCKET: !Ref ConfigS3Bucket
@@ -186,10 +212,8 @@ Resources:
           SNS_TOPIC_ARN: !GetAtt CostOptimizerTopic.TopicArn
           DRY_RUN: "false"
       Code:
-        ZipFile: |
-          # Placeholder: Will be replaced with actual code during deployment
-          def lambda_handler(event, context):
-              return {"statusCode": 500, "body": "Placeholder"}
+        S3Bucket: !Ref CodeS3Bucket
+        S3Key: !Ref CodeS3Key
       Tags:
         - Key: Application
           Value: CostOptimizer
@@ -209,16 +233,17 @@ Resources:
       Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: !Ref LambdaTimeout
       MemorySize: !Ref LambdaMemory
+      VpcConfig:
+        SecurityGroupIds: !Ref VpcSecurityGroupIds
+        SubnetIds: !Ref VpcSubnetIds
       Environment:
         Variables:
           TIMEZONE: UTC
           DRY_RUN: "false"
           SNS_TOPIC_ARN: !GetAtt CostOptimizerTopic.TopicArn
       Code:
-        ZipFile: |
-          # Placeholder: Will be replaced with actual code during deployment
-          def lambda_handler(event, context):
-              return {"statusCode": 500, "body": "Placeholder"}
+        S3Bucket: !Ref CodeS3Bucket
+        S3Key: !Ref CodeS3Key
       Tags:
         - Key: Application
           Value: CostOptimizer
@@ -367,6 +392,8 @@ Resources:
     Type: AWS::Cognito::UserPool
     Properties:
       UserPoolName: cost-optimizer-dashboard-users
+      UserPoolTags:
+        AdminEmail: !Ref AdminEmail
       Policies:
         PasswordPolicy:
           MinimumLength: 8
@@ -405,29 +432,28 @@ Resources:
       Code:
         ZipFile: |
           import json
-          import base64
-          from urllib.parse import urlparse
 
           def lambda_handler(event, context):
               request = event['Records'][0]['cf']['request']
               headers = request['headers']
-              
-              # Allow access to login page
-              if request['uri'] == '/login.html':
+
+              # Allow access to login page and auth API routes
+              if request['uri'] == '/login.html' or request['uri'].startswith('/auth/'):
                   return request
-              
-              # Check for auth cookie
+
+              # Check for Cognito session cookie
               cookies = headers.get('cookie', [{}])[0].get('value', '')
-              auth_cookie = None
-              
+              session_cookie = None
+
               if cookies:
                   for cookie in cookies.split(';'):
                       cookie = cookie.strip()
-                      if cookie.startswith('auth='):
-                          auth_cookie = cookie.split('=', 1)[1]
+                      if cookie.startswith('cognito_session='):
+                          session_cookie = cookie.split('=', 1)[1]
                           break
-              
-              if not auth_cookie:
+
+              # Require a Cognito session cookie for protected pages.
+              if not session_cookie:
                   # Redirect to login
                   return {
                       'status': '302',
@@ -443,34 +469,8 @@ Resources:
                           }]
                       }
                   }
-              
-              # Validate auth cookie (Basic auth encoded)
-              try:
-                  auth_decoded = base64.b64decode(auth_cookie).decode('utf-8')
-                  username, password = auth_decoded.split(':')
-                  
-                  # Simple validation - in production, use Cognito JWT or secure store
-                  if username == 'admin' and password == 'CHANGE_THIS_PASSWORD':
-                      return request
-                  
-              except:
-                  pass
-              
-              # Invalid auth - redirect to login
-              return {
-                  'status': '302',
-                  'statusDescription': 'Found',
-                  'headers': {
-                          'location': [{
-                              'key': 'Location',
-                              'value': '/login.html'
-                          }],
-                          'cache-control': [{
-                              'key': 'Cache-Control',
-                              'value': 'no-cache, no-store, must-revalidate'
-                          }]
-                      }
-              }
+
+              return request
 
   LambdaEdgeExecutionRole:
     Type: AWS::IAM::Role
@@ -486,6 +486,171 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  # ========================================================================
+  # Auth Lambda Function for Cognito Authentication
+  # ========================================================================
+
+  AuthLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-auth-lambda"
+      Runtime: python3.11
+      Handler: aws_cost_optimizer.lambda.auth_handler.lambda_handler
+      Role: !GetAtt AuthLambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Ref CodeS3Bucket
+        S3Key: !Ref CodeS3Key
+      Environment:
+        Variables:
+          COGNITO_REGION: !Ref AWS::Region
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPool
+          COGNITO_CLIENT_ID: !Ref CognitoUserPoolClient
+          ALLOWED_DASHBOARD_GROUPS: "dashboard-users,admin"
+          CORS_ORIGIN: !Sub "https://${CloudFrontDistribution.DomainName}"
+      Timeout: 30
+
+  AuthLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-auth-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CognitoAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-idp:AdminInitiateAuth
+                  - cognito-idp:AdminCreateUser
+                  - cognito-idp:AdminSetUserPassword
+                  - cognito-idp:ListUsers
+                Resource:
+                  - !GetAtt CognitoUserPool.Arn
+
+  # ========================================================================
+  # API Gateway for Auth Endpoints
+  # ========================================================================
+
+  AuthApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub "${AWS::StackName}-auth-api"
+      Description: Authentication API for Cost Optimizer Dashboard
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  AuthApiGatewayResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref AuthApiGateway
+      ParentId: !GetAtt AuthApiGateway.RootResourceId
+      PathPart: auth
+
+  AuthLoginResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref AuthApiGateway
+      ParentId: !Ref AuthApiGatewayResource
+      PathPart: login
+
+  AuthValidateResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref AuthApiGateway
+      ParentId: !Ref AuthApiGatewayResource
+      PathPart: validate
+
+  AuthRefreshResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref AuthApiGateway
+      ParentId: !Ref AuthApiGatewayResource
+      PathPart: refresh
+
+  AuthLogoutResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref AuthApiGateway
+      ParentId: !Ref AuthApiGatewayResource
+      PathPart: logout
+
+  AuthLoginMethodWithPath:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AuthApiGateway
+      ResourceId: !Ref AuthLoginResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthLambda.Arn}/invocations"
+
+  AuthValidateMethodWithPath:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AuthApiGateway
+      ResourceId: !Ref AuthValidateResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthLambda.Arn}/invocations"
+
+  AuthRefreshMethodWithPath:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AuthApiGateway
+      ResourceId: !Ref AuthRefreshResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthLambda.Arn}/invocations"
+
+  AuthLogoutMethodWithPath:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AuthApiGateway
+      ResourceId: !Ref AuthLogoutResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthLambda.Arn}/invocations"
+
+  AuthApiGatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - AuthLoginMethodWithPath
+      - AuthValidateMethodWithPath
+      - AuthRefreshMethodWithPath
+      - AuthLogoutMethodWithPath
+    Properties:
+      RestApiId: !Ref AuthApiGateway
+      StageName: prod
+
+  AuthLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AuthLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AuthApiGateway}/*"
 
   # ========================================================================
   # CloudFront Distribution for Secure Dashboard
@@ -509,6 +674,13 @@ Resources:
             Id: S3Origin
             S3OriginConfig:
               OriginAccessIdentity: !Sub "origin-access-identity/cloudfront/${CloudFrontOriginAccessIdentity}"
+          - DomainName: !Sub "${AuthApiGateway}.execute-api.${AWS::Region}.amazonaws.com"
+            Id: ApiGatewayOrigin
+            OriginPath: /prod
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
         DefaultCacheBehavior:
           TargetOriginId: S3Origin
           ViewerProtocolPolicy: redirect-to-https
@@ -529,6 +701,16 @@ Resources:
               QueryString: false
               Cookies:
                 Forward: none
+          - PathPattern: auth/*
+            TargetOriginId: ApiGatewayOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            Compress: true
+            ForwardedValues:
+              QueryString: true
+              Cookies:
+                Forward: all
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            CachedMethods: [GET, HEAD, OPTIONS]
         PriceClass: PriceClass_100
         HttpVersion: http2
 
@@ -544,6 +726,12 @@ Outputs:
     Value: !GetAtt SchedulerLambdaFunction.Arn
     Export:
       Name: !Sub "${AWS::StackName}-SchedulerLambdaArn"
+
+  AuthLambdaFunctionArn:
+    Description: ARN of authentication Lambda function
+    Value: !GetAtt AuthLambda.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-AuthLambdaArn"
 
   SNSTopicArn:
     Description: ARN of SNS topic for notifications
@@ -568,6 +756,12 @@ Outputs:
     Value: !Sub "https://${CloudFrontDistribution.DomainName}"
     Export:
       Name: !Sub "${AWS::StackName}-DashboardURL"
+
+  AuthApiURL:
+    Description: API Gateway URL for authentication endpoints
+    Value: !Sub "https://${AuthApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod"
+    Export:
+      Name: !Sub "${AWS::StackName}-AuthApiURL"
 
   CognitoUserPoolId:
     Description: Cognito User Pool ID
@@ -599,4 +793,4 @@ Outputs:
 
   DeploymentInstructions:
     Description: Next steps for deployment
-    Value: "1) Update Lambda code via CI/CD or 'aws lambda update-function-code'\n2) Configure config.yaml in S3\n3) Verify SNS subscription in email\n4) Monitor via CloudWatch Dashboard"
+    Value: !Sub "1) Upload Lambda package to s3://${CodeS3Bucket}/${CodeS3Key}\n2) Configure config.yaml in S3\n3) Verify SNS subscription in email\n4) Monitor via CloudWatch Dashboard"

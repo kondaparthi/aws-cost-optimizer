@@ -71,7 +71,7 @@ Resources:
             Action:
               - ec2:DescribeInstances
               - ec2:DescribeInstanceStatus
-              - ec2:DescribeAutoScalingGroups
+              - autoscaling:DescribeAutoScalingGroups
               - ec2:DescribeInstanceAttribute
             Resource: "*"
           

@@ -135,49 +135,134 @@
     </div>
 
     <script>
+        const RAW_AUTH_API_URL = '__AUTH_API_URL__';
+
+        // Configuration - these should be set from CloudFormation outputs
+        const CONFIG = {
+            AUTH_API_URL: RAW_AUTH_API_URL.includes('__AUTH_API_URL__')
+                ? window.location.origin + '/auth'
+                : RAW_AUTH_API_URL,
+            DASHBOARD_URL: '/index.html'
+        };
+
         const loginForm = document.getElementById('loginForm');
         const loginBtn = document.getElementById('loginBtn');
         const errorMsg = document.getElementById('errorMsg');
         const loading = document.getElementById('loading');
 
+        // Utility function to get CSRF token if needed
+        function getCsrfToken() {
+            return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        }
+
+        // Utility function to show error messages
+        function showError(message) {
+            errorMsg.textContent = message;
+            errorMsg.style.display = 'block';
+        }
+
+        // Utility function to hide error messages
+        function hideError() {
+            errorMsg.style.display = 'none';
+        }
+
+        // Login form submission handler
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            const username = document.getElementById('username').value;
+            const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value;
 
+            // Basic client-side validation
+            if (!username || !password) {
+                showError('Please enter both username and password');
+                return;
+            }
+
+            if (username.length < 3) {
+                showError('Username must be at least 3 characters');
+                return;
+            }
+
+            if (password.length < 8) {
+                showError('Password must be at least 8 characters');
+                return;
+            }
+
+            // Disable form and show loading
             loginBtn.disabled = true;
-            errorMsg.style.display = 'none';
+            hideError();
             loading.style.display = 'block';
 
             try {
-                // For demo purposes, using basic auth
-                // In production, integrate with Cognito
-                const authString = btoa(`${username}:${password}`);
-                
-                // Simple validation for demo
-                if (username === 'admin' && password === 'CHANGE_THIS_PASSWORD') {
-                    // Set session cookie and redirect
-                    document.cookie = `auth=${authString}; path=/; max-age=3600`; // 1 hour
-                    window.location.href = '/index.html';
+                // Call Cognito authentication endpoint
+                const response = await fetch(`${CONFIG.AUTH_API_URL}/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': getCsrfToken()
+                    },
+                    credentials: 'include', // Include cookies for session management
+                    body: JSON.stringify({
+                        username: username,
+                        password: password
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Login successful - redirect to dashboard
+                    window.location.href = CONFIG.DASHBOARD_URL;
                 } else {
-                    throw new Error('Invalid credentials');
+                    // Login failed - show error
+                    showError(data.error || 'Login failed');
                 }
 
             } catch (error) {
-                errorMsg.textContent = error.message;
-                errorMsg.style.display = 'block';
+                console.error('Login error:', error);
+                showError('Network error. Please check your connection and try again.');
             } finally {
+                // Re-enable form and hide loading
                 loginBtn.disabled = false;
                 loading.style.display = 'none';
             }
         });
 
-        // Check if already logged in
-        const authCookie = document.cookie.split(';').find(c => c.trim().startsWith('auth='));
-        if (authCookie) {
-            window.location.href = '/index.html';
+        // Check if already logged in on page load
+        async function checkAuthStatus() {
+            try {
+                const response = await fetch(`${CONFIG.AUTH_API_URL}/validate`, {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+
+                if (response.ok) {
+                    // User is already authenticated, redirect to dashboard
+                    window.location.href = CONFIG.DASHBOARD_URL;
+                }
+                // If not authenticated, stay on login page
+            } catch (error) {
+                // Ignore errors - user will need to login
+                console.log('Auth check failed, user needs to login');
+            }
         }
+
+        // Check authentication status when page loads
+        document.addEventListener('DOMContentLoaded', checkAuthStatus);
+
+        // Add input validation feedback
+        document.getElementById('username').addEventListener('input', function() {
+            this.value = this.value.replace(/\s/g, ''); // Remove spaces
+        });
+
+        // Prevent form submission on enter in username field if password is empty
+        document.getElementById('username').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('password').focus();
+            }
+        });
     </script>
 </body>
 </html>
