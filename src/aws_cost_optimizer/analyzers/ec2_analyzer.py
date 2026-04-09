@@ -6,16 +6,73 @@ Copyright (c) 2026 kondaparthi
 Licensed under the MIT License.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, List
 from datetime import datetime, timedelta
 from .base_analyzer import BaseAnalyzer, AnalyzerResult, Finding
+
+# Issue #1: 95th-percentile spike ceiling for idle classification
+_IDLE_P95_CPU_CEILING = 8.0  # percent
 
 
 class EC2Analyzer(BaseAnalyzer):
     """Analyze EC2 instances for cost optimization."""
     
     name = "EC2Analyzer"
-    
+
+    # ------------------------------------------------------------------ #
+    # Issue #7: CloudWatch metric completeness validation                 #
+    # ------------------------------------------------------------------ #
+    def validate_metric_completeness(
+        self,
+        datapoints: List[Dict[str, Any]],
+        days: int,
+        period_seconds: int = 3600,
+    ) -> Dict[str, Any]:
+        """
+        Check whether a CloudWatch metric dataset is at least 95% complete.
+
+        Args:
+            datapoints:      Raw Datapoints list from get_metric_statistics.
+            days:            Analysis window in days.
+            period_seconds:  CloudWatch period used (default 3600 = 1 hour).
+
+        Returns:
+            dict:
+                confidence       – 'high' (≥95% complete) or 'low' (<95%)
+                expected         – expected number of datapoints
+                actual           – actual number of datapoints received
+                completeness_pct – percentage of expected data present
+                gaps             – list of detected time-gap dicts (up to 10)
+        """
+        expected = (days * 24 * 3600) // period_seconds
+        actual = len(datapoints)
+        completeness = actual / expected if expected > 0 else 0.0
+        confidence = "high" if completeness >= 0.95 else "low"
+
+        gaps: List[Dict[str, Any]] = []
+        if confidence == "low" and actual > 1:
+            sorted_dps = sorted(datapoints, key=lambda dp: dp["Timestamp"])
+            for i in range(1, len(sorted_dps)):
+                gap_s = (
+                    sorted_dps[i]["Timestamp"] - sorted_dps[i - 1]["Timestamp"]
+                ).total_seconds()
+                if gap_s > period_seconds * 2:
+                    gaps.append({
+                        "from": sorted_dps[i - 1]["Timestamp"].isoformat(),
+                        "to": sorted_dps[i]["Timestamp"].isoformat(),
+                        "gap_hours": round(gap_s / 3600, 1),
+                    })
+                    if len(gaps) >= 10:
+                        break
+
+        return {
+            "confidence": confidence,
+            "expected": expected,
+            "actual": actual,
+            "completeness_pct": round(completeness * 100, 1),
+            "gaps": gaps,
+        }
+
     def analyze(self, config: Dict[str, Any], result: AnalyzerResult, dry_run: bool = True):
         """
         Find:
@@ -54,24 +111,71 @@ class EC2Analyzer(BaseAnalyzer):
                     if self.skip_policy.should_skip(instance_id, tags):
                         continue
                     
-                    # Get CPU metrics from CloudWatch
+                    # Issue #1 + #7: Fetch average AND 95th-percentile CPU.
+                    # Two separate calls are required because get_metric_statistics
+                    # accepts either Statistics OR ExtendedStatistics, not both.
                     try:
-                        metrics_response = cloudwatch.get_metric_statistics(
+                        start_time = datetime.utcnow() - timedelta(days=idle_days)
+                        end_time = datetime.utcnow()
+                        cw_dims = [{"Name": "InstanceId", "Value": instance_id}]
+
+                        avg_response = cloudwatch.get_metric_statistics(
                             Namespace="AWS/EC2",
                             MetricName="CPUUtilization",
-                            Dimensions=[{"Name": "InstanceId", "Value": instance_id}],
-                            StartTime=datetime.utcnow() - timedelta(days=idle_days),
-                            EndTime=datetime.utcnow(),
-                            Period=3600,  # 1 hour
-                            Statistics=["Average"]
+                            Dimensions=cw_dims,
+                            StartTime=start_time,
+                            EndTime=end_time,
+                            Period=3600,
+                            Statistics=["Average"],
                         )
-                        
-                        datapoints = metrics_response.get("Datapoints", [])
-                        if datapoints:
-                            avg_cpu = sum(dp["Average"] for dp in datapoints) / len(datapoints)
-                            
-                            # If idle, create finding
-                            if avg_cpu < idle_cpu_threshold:
+                        p95_response = cloudwatch.get_metric_statistics(
+                            Namespace="AWS/EC2",
+                            MetricName="CPUUtilization",
+                            Dimensions=cw_dims,
+                            StartTime=start_time,
+                            EndTime=end_time,
+                            Period=3600,
+                            ExtendedStatistics=["p95"],
+                        )
+
+                        avg_datapoints = avg_response.get("Datapoints", [])
+                        p95_datapoints = p95_response.get("Datapoints", [])
+
+                        if avg_datapoints and p95_datapoints:
+                            # Issue #7: Skip idle detection if data coverage is low
+                            completeness = self.validate_metric_completeness(
+                                avg_datapoints, idle_days
+                            )
+                            if completeness["confidence"] == "low":
+                                self.logger.log_event(
+                                    "ec2_idle_skipped_incomplete_metrics",
+                                    {
+                                        "instance_id": instance_id,
+                                        "expected_datapoints": completeness["expected"],
+                                        "actual_datapoints": completeness["actual"],
+                                        "completeness_pct": completeness["completeness_pct"],
+                                        "gaps": completeness["gaps"],
+                                    },
+                                    level="WARN",
+                                )
+                                continue
+
+                            avg_cpu = (
+                                sum(dp["Average"] for dp in avg_datapoints)
+                                / len(avg_datapoints)
+                            )
+                            # Issue #1: Take the maximum p95 across all hourly
+                            # buckets to catch any sustained spike periods.
+                            p95_cpu = max(
+                                dp.get("ExtendedStatistics", {}).get("p95", 0.0)
+                                for dp in p95_datapoints
+                            )
+
+                            # Issue #1: Both conditions must hold to flag idle.
+                            # avg < threshold guards against sustained low use,
+                            # p95 < ceiling guards against sporadic spikes being
+                            # misclassified as "always idle".
+                            if avg_cpu < idle_cpu_threshold and p95_cpu < _IDLE_P95_CPU_CEILING:
                                 monthly_cost = self._get_instance_cost(instance_type)
                                 
                                 finding = Finding(
@@ -79,7 +183,11 @@ class EC2Analyzer(BaseAnalyzer):
                                     resource_type="EC2 Instance",
                                     account_id=self.account_id,
                                     region=self.region,
-                                    issue=f"Idle instance - Average CPU {avg_cpu:.1f}% over {idle_days} days (threshold: {idle_cpu_threshold}%)",
+                                    issue=(
+                                        f"Idle instance - Average CPU {avg_cpu:.1f}% "
+                                        f"(p95: {p95_cpu:.1f}%) over {idle_days} days "
+                                        f"(threshold: avg<{idle_cpu_threshold}%, p95<{_IDLE_P95_CPU_CEILING}%)"
+                                    ),
                                     recommendation=f"Stop or terminate this instance. Cost: ${monthly_cost:.2f}/month.",
                                     severity="high" if avg_cpu < 1 else "medium",
                                     current_monthly_cost=monthly_cost,
@@ -89,7 +197,9 @@ class EC2Analyzer(BaseAnalyzer):
                                     details={
                                         "instance_type": instance_type,
                                         "average_cpu": round(avg_cpu, 2),
+                                        "p95_cpu": round(p95_cpu, 2),
                                         "idle_days": idle_days,
+                                        "metric_completeness_pct": completeness["completeness_pct"],
                                         "launched": launch_time.isoformat() if launch_time else None,
                                     }
                                 )

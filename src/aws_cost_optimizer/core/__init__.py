@@ -236,6 +236,74 @@ class AWSClient:
         session = self.get_session(account_id, role_arn, external_id)
         return session.resource(service)
 
+    def validate_cross_account_access(
+        self,
+        account_id: Optional[str] = None,
+        role_arn: Optional[str] = None,
+        external_id: Optional[str] = None,
+    ) -> None:
+        """
+        Issue #4: Validate that the assumed role has the required read
+        permissions before running any analysis.
+
+        Tests EC2, EBS, and S3 list/describe operations and raises
+        PermissionError if any of them are denied, so that missing
+        permissions surface as an explicit error rather than silently
+        appearing as "resource not found".
+
+        Raises:
+            PermissionError: if one or more required permissions are missing.
+        """
+        session = self.get_session(account_id, role_arn, external_id)
+        permission_errors: List[str] = []
+
+        # Test EC2 read
+        try:
+            ec2 = session.client("ec2", region_name=self.region)
+            ec2.describe_instances(MaxResults=5)
+        except ClientError as e:
+            code = e.response["Error"]["Code"]
+            if code in ("AccessDenied", "AuthFailure", "UnauthorizedOperation"):
+                permission_errors.append(f"EC2 describe_instances: {code}")
+
+        # Test EBS read
+        try:
+            ec2 = session.client("ec2", region_name=self.region)
+            ec2.describe_volumes(MaxResults=5)
+        except ClientError as e:
+            code = e.response["Error"]["Code"]
+            if code in ("AccessDenied", "AuthFailure", "UnauthorizedOperation"):
+                permission_errors.append(f"EBS describe_volumes: {code}")
+
+        # Test S3 read
+        try:
+            s3 = session.client("s3")
+            s3.list_buckets()
+        except ClientError as e:
+            code = e.response["Error"]["Code"]
+            if code in ("AccessDenied", "AuthFailure"):
+                permission_errors.append(f"S3 list_buckets: {code}")
+
+        if permission_errors:
+            self.logger.log_event(
+                "cross_account_permission_denied",
+                {
+                    "account_id": account_id,
+                    "role_arn": role_arn,
+                    "errors": permission_errors,
+                },
+                level="ERROR",
+            )
+            raise PermissionError(
+                f"Cross-account role {role_arn} is missing permissions: "
+                + ", ".join(permission_errors)
+            )
+
+        self.logger.log_event(
+            "cross_account_access_validated",
+            {"account_id": account_id, "role_arn": role_arn},
+        )
+
 
 # ============================================================================
 # Dry-Run Context Manager
@@ -312,4 +380,44 @@ class SkipPolicy:
             )
             return True
         
+        return False
+
+    def should_protect_resource(
+        self,
+        resource_id: str,
+        tags: Dict[str, str],
+        parent_tags_list: Optional[List[Dict[str, str]]] = None,
+    ) -> bool:
+        """
+        Issue #5: Check if a resource OR any of its parent resources has
+        protection tags, supporting parent-tag inheritance chains such as:
+            EBS snapshot → source volume → attached EC2 instance
+
+        Args:
+            resource_id:      The resource being evaluated.
+            tags:             Tag dict for the resource itself.
+            parent_tags_list: Ordered list of tag dicts for parent resources
+                              (e.g., [volume_tags, instance_tags]).
+
+        Returns:
+            True if the resource or any parent should be protected.
+        """
+        # Check the resource's own tags first
+        if self.should_skip(resource_id, tags):
+            return True
+
+        # Walk up the parent chain
+        if parent_tags_list:
+            for idx, parent_tags in enumerate(parent_tags_list):
+                if self.should_skip(f"parent_{idx}_of_{resource_id}", parent_tags):
+                    self.logger.log_event(
+                        "resource_protected_via_parent",
+                        {
+                            "resource_id": resource_id,
+                            "parent_index": idx,
+                            "parent_tags": parent_tags,
+                        },
+                    )
+                    return True
+
         return False

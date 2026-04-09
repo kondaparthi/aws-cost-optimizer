@@ -34,6 +34,11 @@ logger.setLevel(logging.INFO)
 s3_client = boto3.client("s3")
 ssm_client = boto3.client("ssm")
 sns_client = boto3.client("sns")
+sfn_client = boto3.client("stepfunctions")
+
+# Issue #10: Stop processing new accounts/regions when fewer than this many
+# seconds remain in the Lambda execution window.
+TIMEOUT_SAFETY_MARGIN_SECONDS = 30
 
 
 class LambdaConfigLoader:
@@ -127,14 +132,62 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Run analyzers
         # =====================
         findings_report = FindingsReport()
+        # Issue #10: flag set when a timeout safety margin triggers early stop
+        timed_out_early = False
         
         for account in accounts:
+            if timed_out_early:
+                break
+
             account_id = account.get("id")
             role_arn = account.get("role_arn")
             external_id = account.get("external_id")
             account_name = account.get("name", account_id or "local")
             
             for region in regions:
+                # Issue #10: Check remaining execution time before starting
+                # each account/region combination.  If we are within the safety
+                # margin, save partial findings and stop processing.
+                remaining_ms = context.get_remaining_time_in_millis()
+                remaining_seconds = remaining_ms / 1000
+                if remaining_seconds < TIMEOUT_SAFETY_MARGIN_SECONDS:
+                    lambda_logger.log_event(
+                        "lambda_timeout_imminent",
+                        {
+                            "remaining_seconds": round(remaining_seconds, 1),
+                            "current_account": account_name,
+                            "current_region": region,
+                            "findings_so_far": findings_report.total_findings,
+                        },
+                        level="WARN",
+                    )
+                    findings_report.analysis_status = "partial"
+                    findings_report.partial_reason = (
+                        f"Lambda timeout safety margin reached with "
+                        f"{round(remaining_seconds, 1)}s remaining; "
+                        f"stopped before {account_name}/{region}"
+                    )
+                    timed_out_early = True
+                    # Optionally trigger Step Functions for continuation
+                    sfn_arn = os.environ.get("CONTINUATION_STATE_MACHINE_ARN")
+                    if sfn_arn:
+                        try:
+                            sfn_client.start_execution(
+                                stateMachineArn=sfn_arn,
+                                input=json.dumps({
+                                    "remaining_accounts": accounts[accounts.index(account):],
+                                    "remaining_regions": regions,
+                                }),
+                            )
+                            logger.info(
+                                f"Triggered Step Functions continuation: {sfn_arn}"
+                            )
+                        except Exception as sfn_err:
+                            logger.error(
+                                f"Failed to trigger continuation: {sfn_err}"
+                            )
+                    break  # Break out of region loop
+
                 logger.info(f"Analyzing {account_name} / {region}...")
                 
                 try:

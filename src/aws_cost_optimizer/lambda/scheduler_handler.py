@@ -190,6 +190,25 @@ class ScheduleManager:
             logger.error(f"Error starting instance {instance_id}: {str(e)}")
             return False
 
+    def verify_resource_current_state(self, instance_id: str) -> Optional[str]:
+        """
+        Issue #8: Re-fetch the live instance state immediately before acting.
+
+        Returns the current state string (e.g. 'running', 'stopped') or None
+        if the instance no longer exists.
+        """
+        try:
+            resp = ec2_client.describe_instances(InstanceIds=[instance_id])
+            for reservation in resp.get("Reservations", []):
+                for inst in reservation.get("Instances", []):
+                    return inst["State"]["Name"]
+            return None  # Instance not found
+        except Exception as e:
+            logger.error(
+                f"Error re-fetching state for {instance_id}: {str(e)}"
+            )
+            return None
+
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
@@ -229,7 +248,11 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         actions = {
             "stopped": [],
             "started": [],
-            "errors": []
+            "errors": [],
+            # Issue #6: dry-run simulation results (never persisted to S3)
+            "dry_run_would_stop": [],
+            "dry_run_would_start": [],
+            "dry_run_would_skip_state_changed": [],
         }
         
         # =====================
@@ -243,26 +266,61 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             for instance in instances:
                 instance_id = instance["instance_id"]
-                current_state = instance["state"]
+                analysis_state = instance["state"]
                 
                 # Determine desired state
                 should_stop = schedule_manager.should_be_stopped(schedule_name, current_time)
                 should_start = schedule_manager.should_be_started(schedule_name, current_time)
                 
                 logger.info(
-                    f"{instance_id} ({current_state}): "
+                    f"{instance_id} ({analysis_state}): "
                     f"should_stop={should_stop}, should_start={should_start}"
                 )
                 
-                # Take action if needed
-                if should_stop and current_state == "running":
-                    if schedule_manager.stop_instance(instance_id, dry_run=dry_run):
+                # Issue #8: Re-verify live instance state before acting to
+                # guard against races between analysis and execution time.
+                live_state = schedule_manager.verify_resource_current_state(instance_id)
+                if live_state is None:
+                    logger.warning(
+                        f"Instance {instance_id} not found at execution time — skipping"
+                    )
+                    actions["errors"].append(
+                        f"Instance {instance_id} not found at execution time"
+                    )
+                    continue
+                if live_state != analysis_state:
+                    logger.warning(
+                        f"Instance {instance_id} state changed from "
+                        f"'{analysis_state}' to '{live_state}' since analysis — skipping"
+                    )
+                    if dry_run:
+                        actions["dry_run_would_skip_state_changed"].append(instance_id)
+                    else:
+                        actions["errors"].append(
+                            f"{instance_id}: state changed {analysis_state}→{live_state}"
+                        )
+                    continue
+
+                # Issue #6: In dry-run mode, simulate the outcome but do NOT
+                # persist any decisions to S3 or take real actions.
+                if dry_run:
+                    if should_stop and live_state == "running":
+                        actions["dry_run_would_stop"].append(instance_id)
+                        logger.info(f"[DRY-RUN] Would stop instance: {instance_id}")
+                    elif should_start and live_state == "stopped":
+                        actions["dry_run_would_start"].append(instance_id)
+                        logger.info(f"[DRY-RUN] Would start instance: {instance_id}")
+                    continue
+
+                # Take real action
+                if should_stop and live_state == "running":
+                    if schedule_manager.stop_instance(instance_id, dry_run=False):
                         actions["stopped"].append(instance_id)
                     else:
                         actions["errors"].append(f"Failed to stop {instance_id}")
                 
-                elif should_start and current_state == "stopped":
-                    if schedule_manager.start_instance(instance_id, dry_run=dry_run):
+                elif should_start and live_state == "stopped":
+                    if schedule_manager.start_instance(instance_id, dry_run=False):
                         actions["started"].append(instance_id)
                     else:
                         actions["errors"].append(f"Failed to start {instance_id}")
@@ -308,10 +366,17 @@ Errors: {len(actions['errors'])}
             "body": json.dumps({
                 "message": "Scheduling complete",
                 "timestamp": current_time.isoformat(),
+                "dry_run": dry_run,
+                # Real actions (only populated when dry_run=False)
                 "instances_stopped": len(actions["stopped"]),
                 "instances_started": len(actions["started"]),
                 "errors": len(actions["errors"]),
-                "dry_run": dry_run
+                # Dry-run simulation results (only populated when dry_run=True)
+                "dry_run_would_stop": len(actions["dry_run_would_stop"]),
+                "dry_run_would_start": len(actions["dry_run_would_start"]),
+                "dry_run_skipped_state_changed": len(
+                    actions["dry_run_would_skip_state_changed"]
+                ),
             })
         }
         

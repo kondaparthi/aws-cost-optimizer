@@ -63,6 +63,11 @@ class FindingsReport:
     
     # Errors (if any analyzers failed)
     errors: List[str] = field(default_factory=list)
+
+    # Issue #10: Track whether analysis completed fully or was cut short by a
+    # Lambda timeout safety margin.
+    analysis_status: str = "complete"      # "complete" | "partial"
+    partial_reason: Optional[str] = None   # Human-readable explanation when partial
     
     def add_finding(self, finding: Finding):
         """Add a finding and update summary."""
@@ -81,6 +86,8 @@ class FindingsReport:
         """Convert to dictionary for JSON serialization."""
         return {
             'generated_at': self.generated_at,
+            'analysis_status': self.analysis_status,
+            'partial_reason': self.partial_reason,
             'summary': {
                 'total_findings': self.total_findings,
                 'potential_monthly_savings': round(self.potential_monthly_savings, 2),

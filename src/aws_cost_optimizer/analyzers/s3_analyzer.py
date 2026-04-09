@@ -10,6 +10,10 @@ from typing import Dict, Any
 from datetime import datetime, timedelta
 from .base_analyzer import BaseAnalyzer, AnalyzerResult, Finding
 
+# Issue #3: Use an explicit hour-based constant so "7 days" is unambiguous
+# regardless of DST, leap seconds, or calendar-day semantics.
+INCOMPLETE_UPLOAD_THRESHOLD_HOURS = 168  # exactly 7 × 24 hours
+
 
 class S3Analyzer(BaseAnalyzer):
     """Analyze S3 buckets for cost optimization."""
@@ -71,21 +75,33 @@ class S3Analyzer(BaseAnalyzer):
                         )
                         
                         uploads = multipart_response.get("Uploads", [])
-                        threshold_date = datetime.utcnow() - timedelta(days=multipart_age_days)
-                        
+                        # Issue #3: Compute age in fractional hours so the
+                        # comparison is exact and timezone-agnostic.
+                        current_time = datetime.utcnow()
+
                         old_uploads = []
                         total_size_gb = 0
                         
                         for upload in uploads:
                             initiated = upload.get("Initiated")
-                            if initiated and isinstance(initiated, str):
-                                initiated = datetime.fromisoformat(initiated.replace('Z', '+00:00'))
-                            
-                            if initiated and initiated < threshold_date:
+                            if isinstance(initiated, str):
+                                initiated = datetime.fromisoformat(
+                                    initiated.replace("Z", "+00:00")
+                                ).replace(tzinfo=None)
+                            elif initiated and hasattr(initiated, "tzinfo") and initiated.tzinfo:
+                                initiated = initiated.replace(tzinfo=None)
+
+                            if initiated:
+                                age_hours = (
+                                    current_time - initiated
+                                ).total_seconds() / 3600
+                                is_stale = age_hours >= INCOMPLETE_UPLOAD_THRESHOLD_HOURS
+                            else:
+                                is_stale = False
+
+                            if is_stale:
                                 old_uploads.append(upload)
-                                # Try to get size from parts
-                                key = upload.get("Key", "unknown")
-                                total_size_gb += 0.5  # Estimate
+                                total_size_gb += 0.5  # Estimate per upload
                         
                         if old_uploads:
                             cost = self.cost_calculator.s3_storage_cost(total_size_gb, "standard")
@@ -95,7 +111,7 @@ class S3Analyzer(BaseAnalyzer):
                                 resource_type="S3 Bucket",
                                 account_id=self.account_id,
                                 region=self.region,
-                                issue=f"Incomplete multipart uploads - {len(old_uploads)} uploads older than {multipart_age_days} days",
+                                issue=f"Incomplete multipart uploads - {len(old_uploads)} uploads older than {INCOMPLETE_UPLOAD_THRESHOLD_HOURS} hours",
                                 recommendation=f"Delete or complete these uploads. Estimated cost: ${cost:.2f}/month.",
                                 severity="medium",
                                 current_monthly_cost=cost,
