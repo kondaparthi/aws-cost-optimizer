@@ -364,7 +364,7 @@ class SkipPolicy:
         
         # Skip if tags match all conditions
         if_match = self.config.get("skip_if_tags_match", {})
-        if all(tags.get(k) == v for k, v in if_match.items()):
+        if if_match and all(tags.get(k) == v for k, v in if_match.items()):
             self.logger.log_event(
                 "resource_skipped_tags",
                 {"resource_id": resource_id, "tags": tags}

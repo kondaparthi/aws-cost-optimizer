@@ -1,0 +1,541 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AWS Cost Optimizer - LocalStack Community smoke-test stack.
+  Stripped from cost-optimizer-main.yaml to remove services that require
+  LocalStack Pro (Cognito, CloudFront, Lambda@Edge, API Gateway auth).
+  Use this template for local development and integration testing only.
+  Never deploy to a real AWS account.
+
+# ============================================================================
+# Omitted from production template (LocalStack Community limitations):
+#   - Cognito UserPool / UserPoolClient
+#   - CloudFront Distribution + OAI
+#   - Lambda@Edge (AuthEdge, SecurityHeadersEdge) + LambdaEdgeExecutionRole
+#   - AuthLambda + AuthLambdaExecutionRole + API Gateway resources
+#   - VPC configuration for Lambdas
+#   - VpcSubnetIds / VpcSecurityGroupIds parameters
+#   - CrossAccountExternalId parameter / ExternalId STS condition
+#   - DashboardLogsBucket / DashboardLogsBucketPolicy
+#   - AllowedPattern / MinLength / MaxLength constraints (no real CFN validator)
+# ============================================================================
+
+Parameters:
+  ConfigS3Bucket:
+    Type: String
+    Description: S3 bucket containing cost-optimizer config.yaml
+
+  ConfigS3Key:
+    Type: String
+    Default: config/cost-optimizer.yaml
+
+  CodeS3Bucket:
+    Type: String
+    Description: S3 bucket containing Lambda deployment package zip
+
+  CodeS3Key:
+    Type: String
+    Description: S3 key for Lambda deployment package zip
+
+  ReportS3Bucket:
+    Type: String
+    Description: S3 bucket for analysis findings
+
+  DecisionsS3Bucket:
+    Type: String
+    Description: S3 bucket for scheduler decision artifacts
+
+  ReportS3Prefix:
+    Type: String
+    Default: cost-reports/
+
+  DashboardS3Bucket:
+    Type: String
+    Description: S3 bucket the dashboard HTML files are served from
+
+  NotificationEmail:
+    Type: String
+    Default: smoke-test@local.invalid
+    Description: Placeholder email — SNS email delivery is a no-op in LocalStack
+
+  AnalysisSchedule:
+    Type: String
+    Default: cron(0 2 * * ? *)
+
+  SchedulerSchedule:
+    Type: String
+    Default: cron(0 6,18 * * ? *)
+
+  LambdaTimeout:
+    Type: Number
+    Default: 300
+
+  LambdaMemory:
+    Type: Number
+    Default: 1024
+
+Resources:
+
+  # ==========================================================================
+  # KMS – Log Encryption
+  # ==========================================================================
+
+  LogsKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for CloudWatch Logs (LocalStack smoke test)
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowRootAccountAdmin
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: AllowCloudWatchLogsUse
+            Effect: Allow
+            Principal:
+              Service: !Sub "logs.${AWS::Region}.amazonaws.com"
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: '*'
+
+  LogsKmsAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${AWS::StackName}-cw-logs"
+      TargetKeyId: !Ref LogsKmsKey
+
+  # ==========================================================================
+  # SNS
+  # ==========================================================================
+
+  CostOptimizerTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Cost Optimizer Smoke-Test Notifications
+      TopicName: !Sub "${AWS::StackName}-notifications"
+      Subscription:
+        - Endpoint: !Ref NotificationEmail
+          Protocol: email
+
+  CostOptimizerTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref CostOptimizerTopic
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowLambdaRoleToPublish
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt LambdaExecutionRole.Arn
+            Action: sns:Publish
+            Resource: !GetAtt CostOptimizerTopic.TopicArn
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: sns:Publish
+            Resource: !GetAtt CostOptimizerTopic.TopicArn
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
+  # ==========================================================================
+  # IAM – Lambda execution role
+  # ==========================================================================
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CostOptimizerPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # S3 read/write for config and reports
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  - !Sub "arn:aws:s3:::${ConfigS3Bucket}/*"
+                  - !Sub "arn:aws:s3:::${ReportS3Bucket}/*"
+                  - !Sub "arn:aws:s3:::${DecisionsS3Bucket}/*"
+                  - !Sub "arn:aws:s3:::${DashboardS3Bucket}/*"
+
+              # S3 list/metadata for analyzers
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                  - s3:GetBucketTagging
+                  - s3:ListBucketMultipartUploads
+                Resource:
+                  - !Sub "arn:aws:s3:::${ConfigS3Bucket}"
+                  - !Sub "arn:aws:s3:::${ReportS3Bucket}"
+                  - !Sub "arn:aws:s3:::${DecisionsS3Bucket}"
+                  - !Sub "arn:aws:s3:::${DashboardS3Bucket}"
+                  - "arn:aws:s3:::*"   # needed to list all buckets for S3 analyzer
+
+              # EC2 read for analysis
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeVolumes
+                  - ec2:DescribeSnapshots
+                  - ec2:DescribeInstances
+                  - ec2:DescribeInstanceStatus
+                  - ec2:DescribeInstanceAttribute
+                  - autoscaling:DescribeAutoScalingGroups
+                  - cloudwatch:GetMetricStatistics
+                  - cloudwatch:GetMetricData
+                  - logs:DescribeLogGroups
+                Resource: "*"
+
+              # EC2 start/stop for scheduler
+              - Effect: Allow
+                Action:
+                  - ec2:StartInstances
+                  - ec2:StopInstances
+                  - ec2:DeleteVolume
+                  - ec2:DeleteSnapshot
+                Resource: "*"
+
+              # SNS for notifications
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !GetAtt CostOptimizerTopic.TopicArn
+
+              # SSM for optional config
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource: !Sub "arn:${AWS::Partition}:ssm:*:${AWS::AccountId}:parameter/cost-optimizer/*"
+
+  # ==========================================================================
+  # CloudWatch Log Groups
+  # ==========================================================================
+
+  AnalysisLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-analysis"
+      RetentionInDays: 7
+      KmsKeyId: !GetAtt LogsKmsKey.Arn
+
+  SchedulerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-scheduler"
+      RetentionInDays: 7
+      KmsKeyId: !GetAtt LogsKmsKey.Arn
+
+  # ==========================================================================
+  # SQS Dead-Letter Queue for EventBridge
+  # ==========================================================================
+
+  AnalysisFailureQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-analysis-failures"
+      MessageRetentionPeriod: 1209600
+
+  # ==========================================================================
+  # Lambda Functions
+  # ==========================================================================
+
+  AnalysisLambdaFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: AnalysisLogGroup
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-analysis"
+      Runtime: python3.11
+      Handler: aws_cost_optimizer.lambda.analysis_handler.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: !Ref LambdaTimeout
+      MemorySize: !Ref LambdaMemory
+      Environment:
+        Variables:
+          CONFIG_S3_BUCKET: !Ref ConfigS3Bucket
+          CONFIG_S3_KEY: !Ref ConfigS3Key
+          REPORT_S3_BUCKET: !Ref ReportS3Bucket
+          DECISIONS_S3_BUCKET: !Ref DecisionsS3Bucket
+          REPORT_S3_PREFIX: !Ref ReportS3Prefix
+          SNS_TOPIC_ARN: !GetAtt CostOptimizerTopic.TopicArn
+          DRY_RUN: "true"
+      Code:
+        S3Bucket: !Ref CodeS3Bucket
+        S3Key: !Ref CodeS3Key
+      Tags:
+        - Key: Application
+          Value: CostOptimizer
+        - Key: Environment
+          Value: localstack
+
+  SchedulerLambdaFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: SchedulerLogGroup
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-scheduler"
+      Runtime: python3.11
+      Handler: aws_cost_optimizer.lambda.scheduler_handler.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: !Ref LambdaTimeout
+      MemorySize: !Ref LambdaMemory
+      Environment:
+        Variables:
+          TIMEZONE: UTC
+          DRY_RUN: "true"
+          DECISIONS_S3_BUCKET: !Ref DecisionsS3Bucket
+          SNS_TOPIC_ARN: !GetAtt CostOptimizerTopic.TopicArn
+      Code:
+        S3Bucket: !Ref CodeS3Bucket
+        S3Key: !Ref CodeS3Key
+      Tags:
+        - Key: Application
+          Value: CostOptimizer
+        - Key: Environment
+          Value: localstack
+
+  # ==========================================================================
+  # EventBridge Rules
+  # ==========================================================================
+
+  AnalysisEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${AWS::StackName}-analysis-schedule"
+      Description: Trigger cost analysis on schedule (LocalStack)
+      ScheduleExpression: !Ref AnalysisSchedule
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt AnalysisLambdaFunction.Arn
+          Id: CostOptimizerAnalysisTarget
+          DeadLetterConfig:
+            Arn: !GetAtt AnalysisFailureQueue.Arn
+          RetryPolicy:
+            MaximumRetryAttempts: 2
+            MaximumEventAgeInSeconds: 3600
+
+  AnalysisEventPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AnalysisLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt AnalysisEventRule.Arn
+
+  SchedulerEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${AWS::StackName}-scheduler-schedule"
+      Description: Trigger scheduler on schedule (LocalStack)
+      ScheduleExpression: !Ref SchedulerSchedule
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt SchedulerLambdaFunction.Arn
+          Id: CostOptimizerSchedulerTarget
+
+  SchedulerEventPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SchedulerLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt SchedulerEventRule.Arn
+
+  # ==========================================================================
+  # CloudWatch Metric Filter + Alarms
+  # ==========================================================================
+
+  AnalysisErrorMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AnalysisLogGroup
+      FilterPattern: '"ERROR"'
+      MetricTransformations:
+        - MetricValue: '1'
+          MetricNamespace: CostOptimizer
+          MetricName: AnalysisErrorCount
+
+  AnalysisErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-Analysis-Errors"
+      AlarmDescription: Alert if analysis Lambda has errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AnalysisLambdaFunction
+      AlarmActions:
+        - !GetAtt CostOptimizerTopic.TopicArn
+
+  AnalysisFailureQueueAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-Analysis-DLQ-Messages"
+      AlarmDescription: EventBridge delivery failures in analysis DLQ
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt AnalysisFailureQueue.QueueName
+      AlarmActions:
+        - !GetAtt CostOptimizerTopic.TopicArn
+
+  # ==========================================================================
+  # S3 Managed Buckets
+  # ==========================================================================
+
+  FindingsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref ReportS3Bucket
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  DecisionsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref DecisionsS3Bucket
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  DashboardBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref DashboardS3Bucket
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      # Public access kept on in LocalStack so the dashboard HTML can be
+      # viewed directly via the endpoint URL (no CloudFront in Community).
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+
+  FindingsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FindingsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowLambdaReadWriteFindings
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt LambdaExecutionRole.Arn
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+            Resource: !Sub "arn:aws:s3:::${ReportS3Bucket}/*"
+
+  DecisionsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DecisionsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowLambdaReadWriteDecisions
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt LambdaExecutionRole.Arn
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+            Resource: !Sub "arn:aws:s3:::${DecisionsS3Bucket}/*"
+
+  DashboardBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DashboardBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowLambdaWriteDashboard
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt LambdaExecutionRole.Arn
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+            Resource: !Sub "arn:aws:s3:::${DashboardS3Bucket}/*"
+          # Allow public read so findings.json is accessible from the
+          # dashboard HTML in LocalStack without CloudFront.
+          - Sid: AllowPublicReadDashboard
+            Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub "arn:aws:s3:::${DashboardS3Bucket}/*"
+
+Outputs:
+  AnalysisLambdaArn:
+    Value: !GetAtt AnalysisLambdaFunction.Arn
+
+  SchedulerLambdaArn:
+    Value: !GetAtt SchedulerLambdaFunction.Arn
+
+  FindingsBucketName:
+    Value: !Ref FindingsBucket
+
+  DashboardBucketName:
+    Value: !Ref DashboardBucket
+
+  DashboardEndpoint:
+    Description: Direct S3 website endpoint for LocalStack dashboard (no CloudFront)
+    Value: !Sub "http://localhost:4566/${DashboardS3Bucket}/index.html"
