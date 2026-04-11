@@ -5,6 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'src/**'
+      - 'dashboard/**'
       - 'cloudformation/**'
       - 'requirements.txt'
       - '.github/workflows/deploy-lambda.yml'
@@ -94,6 +95,15 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Resolve stack name
+        run: |
+          STACK_NAME="${{ github.event.inputs.stack_name }}"
+          if [ -z "$STACK_NAME" ]; then
+            STACK_NAME="cost-optimizer"
+          fi
+          echo "STACK_NAME=$STACK_NAME" >> $GITHUB_ENV
+          echo "Using stack: $STACK_NAME"
+
       - name: Create S3 bucket for Lambda code (if needed)
         run: |
           aws s3api head-bucket --bucket $ARTIFACT_BUCKET 2>/dev/null || \
@@ -148,6 +158,67 @@ jobs:
             --region $AWS_REGION \
             --query "FunctionArn" \
             --output text
+
+      - name: Render and upload dashboard files
+        continue-on-error: true
+        run: |
+          if ! aws cloudformation describe-stacks --stack-name "$STACK_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+            echo "Stack $STACK_NAME not found. Skipping dashboard upload."
+            exit 0
+          fi
+
+          DASHBOARD_SECRET_ARN=$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='DashboardAccessSecretArn'].OutputValue" \
+            --output text)
+
+          if [ -z "$DASHBOARD_SECRET_ARN" ] || [ "$DASHBOARD_SECRET_ARN" = "None" ]; then
+            echo "DashboardAccessSecretArn not found. Skipping dashboard upload."
+            exit 0
+          fi
+
+          SECRET_JSON=$(aws secretsmanager get-secret-value \
+            --secret-id "$DASHBOARD_SECRET_ARN" \
+            --region "$AWS_REGION" \
+            --query 'SecretString' \
+            --output text)
+
+          AUTH_API_URL=$(python -c "import json,sys; print(json.loads(sys.argv[1]).get('auth_api_url',''))" "$SECRET_JSON")
+
+          REPORT_BUCKET=$(aws cloudformation describe-stack-resource \
+            --stack-name "$STACK_NAME" \
+            --logical-resource-id FindingsBucket \
+            --region "$AWS_REGION" \
+            --query 'StackResourceDetail.PhysicalResourceId' \
+            --output text)
+
+          DASHBOARD_BUCKET=$(aws cloudformation describe-stack-resource \
+            --stack-name "$STACK_NAME" \
+            --logical-resource-id DashboardBucket \
+            --region "$AWS_REGION" \
+            --query 'StackResourceDetail.PhysicalResourceId' \
+            --output text)
+
+          if [ -z "$AUTH_API_URL" ] || [ -z "$REPORT_BUCKET" ] || [ -z "$DASHBOARD_BUCKET" ]; then
+            echo "Missing auth API URL or bucket names. Skipping dashboard upload."
+            exit 0
+          fi
+
+          sed "s|YOUR_REPORTS_BUCKET|$REPORT_BUCKET|g; s|__AUTH_API_URL__|$AUTH_API_URL/auth|g" dashboard/index.html > /tmp/index.html
+          sed "s|__AUTH_API_URL__|$AUTH_API_URL/auth|g" dashboard/login.html > /tmp/login.html
+
+          aws s3 cp /tmp/index.html "s3://$DASHBOARD_BUCKET/index.html" \
+            --region "$AWS_REGION" \
+            --content-type "text/html" \
+            --cache-control "max-age=300"
+
+          aws s3 cp /tmp/login.html "s3://$DASHBOARD_BUCKET/login.html" \
+            --region "$AWS_REGION" \
+            --content-type "text/html" \
+            --cache-control "max-age=300"
+
+          echo "Dashboard files uploaded to s3://$DASHBOARD_BUCKET/"
 
       - name: Verify Lambda updates
         run: |
