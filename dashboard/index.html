@@ -280,6 +280,13 @@
             font-size: 14px;
         }
 
+        .filter-meta {
+            width: 100%;
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 4px;
+        }
+
         select, input {
             padding: 10px 12px;
             border: 1px solid var(--input-border);
@@ -648,8 +655,14 @@
                 </select>
             </div>
 
+            <div class="filter-group">
+                <label>Search:</label>
+                <input id="searchFilter" type="text" placeholder="ID, type, or issue" autocomplete="off">
+            </div>
+
             <button class="secondary" onclick="exportCSV()">📥 Export CSV</button>
             <button class="secondary" onclick="resetFilters()">🔄 Reset</button>
+            <div class="filter-meta" id="filterMeta">Showing 0 of 0 findings</div>
         </div>
 
         <div class="findings-list" id="findingsList">
@@ -799,6 +812,9 @@
                     : `https://s3.amazonaws.com/${reportsBucket}/findings-latest.json`;
 
                 const response = await fetch(findingsUrl);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status} while loading findings`);
+                }
                 const data = await response.json();
                 allFindings = data.findings || [];
 
@@ -825,6 +841,7 @@
             const typeFilter = document.getElementById('typeFilter').value;
             const severityFilter = document.getElementById('severityFilter').value;
             const statusFilter = document.getElementById('statusFilter').value;
+            const searchTerm = document.getElementById('searchFilter').value.trim().toLowerCase();
 
             let filtered = allFindings.filter(f => {
                 if (typeFilter && f.type !== typeFilter) return false;
@@ -833,8 +850,14 @@
                     const action = userActions[f.id] || 'pending';
                     if (action !== statusFilter) return false;
                 }
+                if (searchTerm) {
+                    const searchable = `${f.id} ${f.type} ${f.issue}`.toLowerCase();
+                    if (!searchable.includes(searchTerm)) return false;
+                }
                 return true;
             });
+
+            document.getElementById('filterMeta').textContent = `Showing ${filtered.length} of ${allFindings.length} findings`;
 
             if (filtered.length === 0) {
                 container.innerHTML = '<div class="loading"><p>No findings match your filters</p></div>';
@@ -917,6 +940,7 @@
             document.getElementById('typeFilter').value = '';
             document.getElementById('severityFilter').value = '';
             document.getElementById('statusFilter').value = '';
+            document.getElementById('searchFilter').value = '';
             renderFindings();
         }
 
@@ -972,7 +996,12 @@
 
             // Load from S3 actions.json
             fetch(`https://s3.amazonaws.com/${reportsBucket}/actions/actions.json`)
-                .then(r => r.json())
+                .then(r => {
+                    if (!r.ok) {
+                        throw new Error(`HTTP ${r.status} while loading actions`);
+                    }
+                    return r.json();
+                })
                 .then(data => {
                     data.items?.forEach(item => {
                         userActions[item.id] = item.user_action;
@@ -1011,6 +1040,22 @@
             document.getElementById('typeFilter').addEventListener('change', renderFindings);
             document.getElementById('severityFilter').addEventListener('change', renderFindings);
             document.getElementById('statusFilter').addEventListener('change', renderFindings);
+            document.getElementById('searchFilter').addEventListener('input', renderFindings);
+
+            document.addEventListener('keydown', (event) => {
+                const target = event.target;
+                const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT');
+
+                if (event.key === '/' && !isInput) {
+                    event.preventDefault();
+                    document.getElementById('searchFilter').focus();
+                }
+
+                if (event.key.toLowerCase() === 'r' && !isInput) {
+                    event.preventDefault();
+                    resetFilters();
+                }
+            });
         }
 
         document.addEventListener('DOMContentLoaded', initDashboard);

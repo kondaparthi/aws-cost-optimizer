@@ -209,6 +209,35 @@
             color: var(--muted);
         }
 
+        .password-wrap {
+            position: relative;
+        }
+
+        .password-toggle {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            border: 1px solid var(--input-border);
+            background: var(--input-bg);
+            color: var(--muted);
+            border-radius: 10px;
+            padding: 6px 10px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .password-toggle:hover {
+            color: var(--heading);
+        }
+
+        .caps-warning {
+            display: none;
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--error-text);
+        }
+
         .login-btn {
             width: 100%;
             padding: 14px;
@@ -307,7 +336,11 @@
 
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" required>
+                <div class="password-wrap">
+                    <input type="password" id="password" required>
+                    <button type="button" class="password-toggle" id="passwordToggle" aria-label="Show password">Show</button>
+                </div>
+                <div class="caps-warning" id="capsWarning">Caps Lock appears to be on.</div>
             </div>
 
             <button type="submit" class="login-btn" id="loginBtn">Login</button>
@@ -340,6 +373,10 @@
         const loginBtn = document.getElementById('loginBtn');
         const errorMsg = document.getElementById('errorMsg');
         const loading = document.getElementById('loading');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const passwordToggle = document.getElementById('passwordToggle');
+        const capsWarning = document.getElementById('capsWarning');
 
         function applyTheme(theme) {
             document.body.classList.toggle('theme-dark', theme === 'dark');
@@ -375,6 +412,28 @@
             errorMsg.style.display = 'none';
         }
 
+        function updateLoginButtonState() {
+            const hasUsername = usernameInput.value.trim().length > 0;
+            const hasPassword = passwordInput.value.length > 0;
+            loginBtn.disabled = !hasUsername || !hasPassword;
+        }
+
+        function togglePasswordVisibility() {
+            const reveal = passwordInput.type === 'password';
+            passwordInput.type = reveal ? 'text' : 'password';
+            passwordToggle.textContent = reveal ? 'Hide' : 'Show';
+            passwordToggle.setAttribute('aria-label', reveal ? 'Hide password' : 'Show password');
+            passwordInput.focus();
+        }
+
+        function updateCapsLockWarning(event) {
+            if (event && typeof event.getModifierState === 'function' && event.getModifierState('CapsLock')) {
+                capsWarning.style.display = 'block';
+            } else {
+                capsWarning.style.display = 'none';
+            }
+        }
+
         // Login form submission handler
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -384,8 +443,8 @@
                 return;
             }
 
-            const username = document.getElementById('username').value.trim();
-            const password = document.getElementById('password').value;
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value;
 
             // Basic client-side validation
             if (!username || !password) {
@@ -438,7 +497,7 @@
                 showError('Network error. Please check your connection and try again.');
             } finally {
                 // Re-enable form and hide loading
-                loginBtn.disabled = false;
+                updateLoginButtonState();
                 loading.style.display = 'none';
             }
         });
@@ -470,18 +529,30 @@
         document.addEventListener('DOMContentLoaded', () => {
             initializeTheme();
             checkAuthStatus();
+            updateLoginButtonState();
+            usernameInput.focus();
         });
 
         // Add input validation feedback
-        document.getElementById('username').addEventListener('input', function() {
+        usernameInput.addEventListener('input', function() {
             this.value = this.value.replace(/\s/g, ''); // Remove spaces
+            updateLoginButtonState();
         });
 
+        passwordInput.addEventListener('input', updateLoginButtonState);
+        passwordInput.addEventListener('keydown', updateCapsLockWarning);
+        passwordInput.addEventListener('keyup', updateCapsLockWarning);
+        passwordInput.addEventListener('blur', () => {
+            capsWarning.style.display = 'none';
+        });
+
+        passwordToggle.addEventListener('click', togglePasswordVisibility);
+
         // Prevent form submission on enter in username field if password is empty
-        document.getElementById('username').addEventListener('keydown', function(e) {
+        usernameInput.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                document.getElementById('password').focus();
+                passwordInput.focus();
             }
         });
     </script>

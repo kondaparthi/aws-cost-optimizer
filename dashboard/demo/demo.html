@@ -271,6 +271,13 @@
             font-size: 14px;
         }
 
+        .filter-meta {
+            width: 100%;
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 4px;
+        }
+
         select, input {
             padding: 10px 12px;
             border: 1px solid var(--input-border);
@@ -638,8 +645,14 @@
                 </select>
             </div>
 
+            <div class="filter-group">
+                <label>Search:</label>
+                <input id="searchFilter" type="text" placeholder="ID, type, or issue" autocomplete="off">
+            </div>
+
             <button class="secondary" onclick="exportCSV()">📥 Export CSV</button>
             <button class="secondary" onclick="resetFilters()">🔄 Reset</button>
+            <div class="filter-meta" id="filterMeta">Showing 0 of 0 findings</div>
         </div>
 
         <div class="findings-list" id="findingsList">
@@ -663,6 +676,7 @@
 
     <script>
         const THEME_STORAGE_KEY = 'dashboard-theme';
+        const DEMO_ACTIONS_STORAGE_KEY = 'demo-dashboard-actions';
         const themeToggle = document.getElementById('themeToggle');
         const themeIcon = document.getElementById('themeIcon');
         const themeLabel = document.getElementById('themeLabel');
@@ -710,8 +724,10 @@
 
         async function loadFindings() {
             try {
-                const response = await fetch('./findings-realistic.json');
-                const data = await response.json();
+                const data = await fetchJsonWithFallback([
+                    './findings-realistic.json',
+                    './findings-sample.json'
+                ]);
                 allFindings = data.findings || [];
 
                 updateSummary();
@@ -720,6 +736,24 @@
             } catch (error) {
                 showError('Failed to load findings: ' + error.message);
             }
+        }
+
+        async function fetchJsonWithFallback(paths) {
+            let lastError = null;
+
+            for (const path of paths) {
+                try {
+                    const response = await fetch(path, { cache: 'no-store' });
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status} at ${path}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+
+            throw lastError || new Error('Unable to load JSON data');
         }
 
         function updateSummary() {
@@ -737,6 +771,7 @@
             const typeFilter = document.getElementById('typeFilter').value;
             const severityFilter = document.getElementById('severityFilter').value;
             const statusFilter = document.getElementById('statusFilter').value;
+            const searchTerm = document.getElementById('searchFilter').value.trim().toLowerCase();
 
             let filtered = allFindings.filter(f => {
                 if (typeFilter && f.type !== typeFilter) return false;
@@ -745,8 +780,14 @@
                     const action = userActions[f.id] || 'pending';
                     if (action !== statusFilter) return false;
                 }
+                if (searchTerm) {
+                    const searchable = `${f.id} ${f.type} ${f.issue}`.toLowerCase();
+                    if (!searchable.includes(searchTerm)) return false;
+                }
                 return true;
             });
+
+            document.getElementById('filterMeta').textContent = `Showing ${filtered.length} of ${allFindings.length} findings`;
 
             if (filtered.length === 0) {
                 container.innerHTML = '<div class="loading"><p>No findings match your filters</p></div>';
@@ -805,6 +846,7 @@
 
         function markAction(findingId, action) {
             userActions[findingId] = action;
+            persistUserActions();
             renderFindings();
         }
 
@@ -829,11 +871,13 @@
             document.getElementById('typeFilter').value = '';
             document.getElementById('severityFilter').value = '';
             document.getElementById('statusFilter').value = '';
+            document.getElementById('searchFilter').value = '';
             renderFindings();
         }
 
         function saveActions() {
             console.log('Saving actions:', userActions);
+            persistUserActions();
             showSuccess('Actions saved! Scheduler will execute marked removals.');
         }
 
@@ -859,13 +903,24 @@
         }
 
         function loadUserActions() {
+            try {
+                const savedActions = localStorage.getItem(DEMO_ACTIONS_STORAGE_KEY);
+                if (savedActions) {
+                    userActions = JSON.parse(savedActions) || {};
+                }
+            } catch (error) {
+                console.warn('Unable to load local actions:', error);
+            }
+
             // Load sample actions
-            fetch('./actions-realistic.json')
-                .then(r => r.json())
+            fetchJsonWithFallback(['./actions-realistic.json', './actions-sample.json'])
                 .then(data => {
                     data.items?.forEach(item => {
-                        userActions[item.id] = item.user_action;
+                        if (!userActions[item.id]) {
+                            userActions[item.id] = item.user_action;
+                        }
                     });
+                    persistUserActions();
                     updateActionCounter();
                     updateTotalSavings();
                     renderFindings(); // Re-render to show pre-marked actions
@@ -873,6 +928,10 @@
                 .catch(() => {
                     // No sample actions, continue
                 });
+        }
+
+        function persistUserActions() {
+            localStorage.setItem(DEMO_ACTIONS_STORAGE_KEY, JSON.stringify(userActions));
         }
 
         function showError(msg) {
@@ -894,6 +953,22 @@
             document.getElementById('typeFilter').addEventListener('change', renderFindings);
             document.getElementById('severityFilter').addEventListener('change', renderFindings);
             document.getElementById('statusFilter').addEventListener('change', renderFindings);
+            document.getElementById('searchFilter').addEventListener('input', renderFindings);
+
+            document.addEventListener('keydown', (event) => {
+                const target = event.target;
+                const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT');
+
+                if (event.key === '/' && !isInput) {
+                    event.preventDefault();
+                    document.getElementById('searchFilter').focus();
+                }
+
+                if (event.key.toLowerCase() === 'r' && !isInput) {
+                    event.preventDefault();
+                    resetFilters();
+                }
+            });
         });
     </script>
 </body>
