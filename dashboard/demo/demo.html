@@ -323,6 +323,11 @@
             box-shadow: 0 12px 24px rgba(22, 163, 74, 0.18);
         }
 
+        .action-buttons button.notify {
+            background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+            box-shadow: 0 12px 24px rgba(217, 119, 6, 0.2);
+        }
+
         .findings-list {
             padding: 28px 30px;
         }
@@ -468,6 +473,29 @@
         .action-status.remove {
             background: var(--success-soft);
             color: var(--success);
+        }
+
+        .action-status.notify {
+            background: var(--warning-soft);
+            color: var(--warning);
+        }
+
+        .risk-note {
+            margin-top: 10px;
+            font-size: 12px;
+            padding: 8px 10px;
+            border-radius: 10px;
+            border: 1px solid var(--panel-border);
+        }
+
+        .risk-note.safe {
+            background: var(--success-soft);
+            color: var(--success);
+        }
+
+        .risk-note.caution {
+            background: var(--warning-soft);
+            color: var(--warning);
         }
 
         .footer {
@@ -638,7 +666,15 @@
                     <option value="pending">Pending</option>
                     <option value="keep">Keep</option>
                     <option value="remove">Remove</option>
+                    <option value="notify">Notify</option>
                 </select>
+            </div>
+
+            <div class="filter-group">
+                <label>
+                    <input id="orphanOnlyFilter" type="checkbox">
+                    Orphaned only
+                </label>
             </div>
 
             <div class="filter-group">
@@ -718,6 +754,43 @@
             return getMonthlySavings(finding) * 12;
         }
 
+        function isAutomationManaged(finding) {
+            const tags = finding?.tags || {};
+            const normalized = Object.entries(tags)
+                .map(([key, value]) => `${String(key).toLowerCase()}:${String(value).toLowerCase()}`)
+                .join(' ');
+
+            const issueText = String(finding?.issue || '').toLowerCase();
+            const automationHints = [
+                'cloudformation',
+                'terraform',
+                'cdk',
+                'pulumi',
+                'ansible',
+                'managed-by',
+                'automation'
+            ];
+
+            return automationHints.some(hint => normalized.includes(hint) || issueText.includes(hint));
+        }
+
+        function isLikelyOrphaned(finding) {
+            if (isAutomationManaged(finding)) {
+                return false;
+            }
+
+            const issueText = String(finding?.issue || '').toLowerCase();
+            const orphanSignals = [
+                'unattached',
+                'orphan',
+                'incomplete multipart',
+                'unused',
+                'no active connections'
+            ];
+
+            return orphanSignals.some(signal => issueText.includes(signal));
+        }
+
         async function loadFindings() {
             try {
                 const data = await fetchJsonWithFallback([
@@ -786,6 +859,7 @@
             const typeFilter = document.getElementById('typeFilter').value;
             const severityFilter = document.getElementById('severityFilter').value;
             const statusFilter = document.getElementById('statusFilter').value;
+            const orphanOnly = document.getElementById('orphanOnlyFilter').checked;
             const searchTerm = document.getElementById('searchFilter').value.trim().toLowerCase();
 
             let filtered = allFindings.filter(f => {
@@ -795,6 +869,7 @@
                     const action = userActions[f.id] || 'pending';
                     if (action !== statusFilter) return false;
                 }
+                if (orphanOnly && !isLikelyOrphaned(f)) return false;
                 if (searchTerm) {
                     const searchable = `${f.id} ${f.type} ${f.issue}`.toLowerCase();
                     if (!searchable.includes(searchTerm)) return false;
@@ -812,6 +887,14 @@
             container.innerHTML = filtered.map(finding => {
                 const action = userActions[finding.id] || 'pending';
                 const className = action === 'keep' ? 'kept' : action === 'remove' ? 'marked-remove' : '';
+                const automationManaged = isAutomationManaged(finding);
+                const orphaned = isLikelyOrphaned(finding);
+                const riskClass = orphaned ? 'safe' : 'caution';
+                const riskText = orphaned
+                    ? 'Likely orphaned resource: safer candidate for removal.'
+                    : automationManaged
+                        ? 'Automation-managed resource detected: removal can cause drift. Prefer Notify.'
+                        : 'Not clearly orphaned: review dependencies before removal.';
 
                 return `
                     <div class="finding-item ${className}" id="finding-${finding.id}">
@@ -846,11 +929,13 @@
                             <div class="action-buttons">
                                 <button class="keep" onclick="markAction('${finding.id}', 'keep')">✓ KEEP</button>
                                 <button class="remove" onclick="markAction('${finding.id}', 'remove')">✕ REMOVE</button>
+                                <button class="notify" onclick="markAction('${finding.id}', 'notify')">⚠ NOTIFY USERS</button>
                             </div>
                             <div class="action-status ${action}" id="status-${finding.id}">
-                                ${action === 'pending' ? '⏳ Pending' : action === 'keep' ? '✓ Keep' : '✓ Remove'}
+                                ${action === 'pending' ? '⏳ Pending' : action === 'keep' ? '✓ Keep' : action === 'remove' ? '✓ Remove' : '⚠ Notify'}
                             </div>
                         </div>
+                        <div class="risk-note ${riskClass}">${riskText}</div>
                     </div>
                 `;
             }).join('');
@@ -860,6 +945,17 @@
         }
 
         function markAction(findingId, action) {
+            const finding = allFindings.find(f => f.id === findingId);
+
+            if (action === 'remove' && finding && !isLikelyOrphaned(finding)) {
+                const proceed = window.confirm(
+                    'This resource is not clearly orphaned and may be automation-managed. Removing it can cause CloudFormation/Terraform drift. Continue?'
+                );
+                if (!proceed) {
+                    return;
+                }
+            }
+
             userActions[findingId] = action;
             persistUserActions();
             renderFindings();
@@ -886,6 +982,7 @@
             document.getElementById('typeFilter').value = '';
             document.getElementById('severityFilter').value = '';
             document.getElementById('statusFilter').value = '';
+            document.getElementById('orphanOnlyFilter').checked = false;
             document.getElementById('searchFilter').value = '';
             renderFindings();
         }
@@ -893,7 +990,8 @@
         function saveActions() {
             console.log('Saving actions:', userActions);
             persistUserActions();
-            showSuccess('Actions saved! Scheduler will execute marked removals.');
+            const notifyCount = Object.values(userActions).filter(action => action === 'notify').length;
+            showSuccess(`Actions saved! Scheduler will execute marked removals. Notify actions: ${notifyCount}.`);
         }
 
         function exportCSV() {
@@ -968,6 +1066,7 @@
             document.getElementById('typeFilter').addEventListener('change', renderFindings);
             document.getElementById('severityFilter').addEventListener('change', renderFindings);
             document.getElementById('statusFilter').addEventListener('change', renderFindings);
+            document.getElementById('orphanOnlyFilter').addEventListener('change', renderFindings);
             document.getElementById('searchFilter').addEventListener('input', renderFindings);
 
             document.addEventListener('keydown', (event) => {

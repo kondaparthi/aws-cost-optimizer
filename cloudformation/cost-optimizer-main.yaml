@@ -863,6 +863,7 @@ Resources:
           COGNITO_USER_POOL_ID: !Ref CognitoUserPool
           COGNITO_CLIENT_ID: !Ref CognitoUserPoolClient
           ALLOWED_DASHBOARD_GROUPS: "dashboard-users,admin"
+          SNS_TOPIC_ARN: !GetAtt CostOptimizerTopic.TopicArn
           CORS_ORIGIN: !Sub "https://${CloudFrontDistribution.DomainName}"
       Timeout: 30
 
@@ -892,6 +893,10 @@ Resources:
                   - cognito-idp:ListUsers
                 Resource:
                   - !GetAtt CognitoUserPool.Arn
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !GetAtt CostOptimizerTopic.TopicArn
 
   # ========================================================================
   # API Gateway for Auth Endpoints
@@ -941,6 +946,13 @@ Resources:
       ParentId: !Ref AuthApiGatewayResource
       PathPart: logout
 
+  AuthNotifyResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref AuthApiGateway
+      ParentId: !Ref AuthApiGatewayResource
+      PathPart: notify
+
   AuthLoginMethodWithPath:
     Type: AWS::ApiGateway::Method
     Properties:
@@ -989,6 +1001,18 @@ Resources:
         IntegrationHttpMethod: POST
         Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthLambda.Arn}/invocations"
 
+  AuthNotifyMethodWithPath:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AuthApiGateway
+      ResourceId: !Ref AuthNotifyResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthLambda.Arn}/invocations"
+
   AuthApiGatewayDeployment:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
@@ -996,6 +1020,7 @@ Resources:
       - AuthValidateMethodWithPath
       - AuthRefreshMethodWithPath
       - AuthLogoutMethodWithPath
+      - AuthNotifyMethodWithPath
     Properties:
       RestApiId: !Ref AuthApiGateway
       StageName: prod

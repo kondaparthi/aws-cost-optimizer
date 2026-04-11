@@ -7,6 +7,7 @@ import json
 import logging
 import os
 from typing import Dict, Any, Optional
+import boto3
 
 from aws_cost_optimizer.utils.auth import (
     authenticate_user,
@@ -21,6 +22,39 @@ from aws_cost_optimizer.utils.auth import (
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+sns_client = boto3.client('sns')
+
+
+def _get_session_user(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Return authenticated user info from session cookie, or None."""
+    headers = event.get('headers', {}) or {}
+    cookies = headers.get('Cookie') or headers.get('cookie') or ''
+    if not cookies:
+        return None
+
+    session_cookie = None
+    for cookie in cookies.split(';'):
+        cookie = cookie.strip()
+        if cookie.startswith('cognito_session='):
+            session_cookie = cookie.split('=', 1)[1]
+            break
+
+    if not session_cookie:
+        return None
+
+    tokens = extract_tokens_from_cookie(session_cookie)
+    if not tokens:
+        return None
+
+    user_info = get_user_info(tokens['access_token'])
+    if not user_info:
+        return None
+
+    if not validate_dashboard_access(user_info):
+        return None
+
+    return user_info
 
 
 def login_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -293,6 +327,95 @@ def logout_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
 
 
+def notify_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """
+    Send real email notifications through SNS for user-selected findings.
+
+    Expected body:
+    {
+      "notifications": [{"id": "...", "type": "...", "issue": "...", "action": "notify"}],
+      "dashboard_url": "https://..."
+    }
+    """
+    try:
+        user_info = _get_session_user(event)
+        if not user_info:
+            return {
+                'statusCode': 401,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'error': 'Unauthorized'})
+            }
+
+        body = json.loads(event.get('body') or '{}') if isinstance(event.get('body'), str) else (event.get('body') or {})
+        notifications = body.get('notifications') or []
+        dashboard_url = body.get('dashboard_url') or ''
+
+        if not notifications:
+            return {
+                'statusCode': 400,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'error': 'No notifications provided'})
+            }
+
+        topic_arn = os.environ.get('SNS_TOPIC_ARN')
+        if not topic_arn:
+            return {
+                'statusCode': 500,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'error': 'SNS topic is not configured'})
+            }
+
+        trimmed = notifications[:50]
+        lines = []
+        for item in trimmed:
+            fid = item.get('id', 'unknown')
+            ftype = item.get('type', 'unknown')
+            issue = item.get('issue', 'No issue details provided')
+            lines.append(f"- {fid} ({ftype}): {issue}")
+
+        if len(notifications) > 50:
+            lines.append(f"- ...and {len(notifications) - 50} more findings")
+
+        actor = user_info.get('email') or user_info.get('username') or 'unknown-user'
+        message = (
+            "AWS Cost Optimizer - Notification Request\n\n"
+            f"Requested by: {actor}\n"
+            f"Notify findings count: {len(notifications)}\n"
+            f"Dashboard URL: {dashboard_url or 'N/A'}\n\n"
+            "Requested findings:\n"
+            + "\n".join(lines)
+        )
+
+        sns_client.publish(
+            TopicArn=topic_arn,
+            Subject=f"[Cost Optimizer] User notify request ({len(notifications)} findings)",
+            Message=message,
+        )
+
+        return {
+            'statusCode': 200,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({
+                'message': 'Notification email request sent',
+                'sent_count': len(notifications)
+            })
+        }
+
+    except json.JSONDecodeError:
+        return {
+            'statusCode': 400,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({'error': 'Invalid JSON'})
+        }
+    except Exception as e:
+        logger.error(f"Notify handler error: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({'error': 'Internal server error'})
+        }
+
+
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Main Lambda handler for authentication endpoints.
@@ -327,6 +450,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             response = refresh_token_handler(event, context)
         elif path == '/auth/logout' and method == 'POST':
             response = logout_handler(event, context)
+        elif path == '/auth/notify' and method == 'POST':
+            response = notify_handler(event, context)
         else:
             response = {
                 'statusCode': 404,
