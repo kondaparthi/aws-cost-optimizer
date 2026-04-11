@@ -618,10 +618,6 @@
                 <label>Filter by Type:</label>
                 <select id="typeFilter">
                     <option value="">All Types</option>
-                    <option value="EBS Volume">EBS Volume</option>
-                    <option value="EC2 Instance">EC2 Instance</option>
-                    <option value="S3 Bucket">S3 Bucket</option>
-                    <option value="CloudWatch">CloudWatch Logs</option>
                 </select>
             </div>
 
@@ -730,11 +726,30 @@
                 ]);
                 allFindings = data.findings || [];
 
+                populateTypeFilterOptions();
                 updateSummary();
                 renderFindings();
                 loadUserActions();
             } catch (error) {
                 showError('Failed to load findings: ' + error.message);
+            }
+        }
+
+        function populateTypeFilterOptions() {
+            const typeFilter = document.getElementById('typeFilter');
+            const selectedValue = typeFilter.value;
+            const uniqueTypes = [...new Set(allFindings.map(f => f.type).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+            typeFilter.innerHTML = '<option value="">All Types</option>';
+            uniqueTypes.forEach(type => {
+                const option = document.createElement('option');
+                option.value = type;
+                option.textContent = type;
+                typeFilter.appendChild(option);
+            });
+
+            if (selectedValue && uniqueTypes.includes(selectedValue)) {
+                typeFilter.value = selectedValue;
             }
         }
 
