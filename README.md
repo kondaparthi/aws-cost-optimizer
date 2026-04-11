@@ -434,7 +434,7 @@ Dashboard shows findings from ALL accounts with regional breakdown.
 Experience the cost optimizer with realistic synthetic data:
 ![AWS Cost Optimizer Dashboard Login](dashboard/demo/dashboard-login.png)
 
-![AWS Cost Optimizer Dashboard](dashboard/demo/dashboard-screenshot.png)
+![AWS Cost Optimizer Dashboard](dashboard/demo/dashboard-screenshot-1.png)
 
 ```bash
 cd dashboard/demo
