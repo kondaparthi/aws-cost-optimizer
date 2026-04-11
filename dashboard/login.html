@@ -329,7 +329,8 @@
             AUTH_API_URL: RAW_AUTH_API_URL.includes('__AUTH_API_URL__')
                 ? window.location.origin + '/auth'
                 : RAW_AUTH_API_URL,
-            DASHBOARD_URL: '/index.html'
+            DASHBOARD_URL: 'index.html',
+            SMOKE_MODE: RAW_AUTH_API_URL.includes('__AUTH_API_URL__')
         };
 
         const themeToggle = document.getElementById('themeToggle');
@@ -377,6 +378,11 @@
         // Login form submission handler
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+
+            if (CONFIG.SMOKE_MODE) {
+                window.location.href = CONFIG.DASHBOARD_URL;
+                return;
+            }
 
             const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value;
@@ -439,6 +445,10 @@
 
         // Check if already logged in on page load
         async function checkAuthStatus() {
+            if (CONFIG.SMOKE_MODE) {
+                return;
+            }
+
             try {
                 const response = await fetch(`${CONFIG.AUTH_API_URL}/validate`, {
                     method: 'GET',
