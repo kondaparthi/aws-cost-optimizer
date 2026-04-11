@@ -192,6 +192,7 @@ Dashboard shows results
 - Architecture & design decisions
 - Deployment guide (step-by-step)
 - CI/CD integration guide
+- LocalStack deployment and compatibility guide
 - Configuration reference
 - Real-world examples
 - Troubleshooting guide
@@ -431,6 +432,7 @@ Dashboard shows findings from ALL accounts with regional breakdown.
 ## Demo Dashboard
 
 Experience the cost optimizer with realistic synthetic data:
+![AWS Cost Optimizer Dashboard Login](dashboard/demo/dashboard-login.png)
 
 ![AWS Cost Optimizer Dashboard](dashboard/demo/dashboard-screenshot.png)
 
