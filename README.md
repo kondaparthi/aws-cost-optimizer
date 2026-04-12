@@ -1,6 +1,6 @@
 # AWS Cost Optimizer Framework
 
-## Production-Grade Infrastructure for Multi-Account Cost Optimization
+## Production-Ready Infrastructure for Multi-Account AWS Cost Optimization
 
 This is a **complete, enterprise-ready solution** for AWS cost optimization built from real-world experience managing complex multi-account AWS environments.
 
@@ -12,7 +12,7 @@ A **CloudFormation-deployed, fully automated AWS cost optimization system** that
 
 ✅ **Runs automatically** - No manual scripts or CLI commands needed  
 ✅ **Analyzes costs daily** - Identifies optimization opportunities overnight  
-✅ **Provides visibility** - Web dashboard shows exact savings opportunities  
+✅ **Provides visibility** - Web dashboard shows estimated savings opportunities  
 ✅ **Executes safely** - Tag-based protection prevents accidental deletions  
 ✅ **Tracks everything** - Complete audit trail for compliance  
 ✅ **Multi-account ready** - Analyze across 100+ AWS accounts  
@@ -31,7 +31,7 @@ A **CloudFormation-deployed, fully automated AWS cost optimization system** that
 ### Problem 2: Idle EC2 Instances
 - **Cost**: $20-100/month per idle instance  
 - **How it's found**: CloudWatch CPU metrics (< 5% for 7 days)
-- **How it's fixed**: Dashboard shows cost & CPU data, user approves stop
+- **How it's fixed**: Dashboard shows CPU and savings context; user approves supported actions (schedule, rightsize, notify, or remove where appropriate)
 - **Result**: $3K-10K/month typical savings
 
 ### Problem 3: S3 Storage Waste
@@ -48,12 +48,12 @@ A **CloudFormation-deployed, fully automated AWS cost optimization system** that
 
 ### Problem 5: Lack of Visibility
 - **Cost**: Unknown waste, no optimization priorities
-- **How it's fixed**: Dashboard shows ALL findings with exact costs
+- **How it's fixed**: Dashboard shows prioritized findings with estimated savings and supporting context
 - **Result**: Data-driven decision making
 
 ---
 
-## Enhanced Security Architecture 
+## Architecture 
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -70,7 +70,7 @@ A **CloudFormation-deployed, fully automated AWS cost optimization system** that
 │ ┌──▼─────────────────┐ ┌▼──────────────────────┐     │
 │ │ Analysis Lambda    │ │ Scheduler Lambda      │     │
 │ │ • EBS, EC2, S3     │ │ • EC2/EMR start-stop   │
-│ │ • CloudWatch       │ │ • Tag-based schedules  │
+│ │ • Metrics context  │ │ • S3 lifecycle flows   │
 │ │ • JSON findings    │ │ • Dry-run / execute    │
 │ └────────┬──────────┘ └─────────────────────────┘     │
 │          │                                            │
@@ -98,7 +98,7 @@ A **CloudFormation-deployed, fully automated AWS cost optimization system** that
         │ (Static S3 site) │
         │ • Login required │
         │ • Review findings│
-        │ • Keep / Remove  │
+        │ • Action choices │
         │ • Export CSV     │
         └──────────────────┘
 ```
@@ -152,10 +152,10 @@ Any time  → Users review findings and approve actions in dashboard
 
 **Lambda Functions (2 Complete):**
 - analysis_handler.py: Nightly analysis (generates findings.json)
-- scheduler_handler.py: Action execution (deletes/stops resources)
+- scheduler_handler.py: Action execution (supported remove, schedule, and S3 lifecycle workflows)
 
 **Infrastructure:**
-- CloudFormation templates (2 complete templates)
+- CloudFormation templates (3 complete templates)
 - Deployment automation script
 - GitHub Actions CI/CD pipelines
 
@@ -164,10 +164,10 @@ Any time  → Users review findings and approve actions in dashboard
 - **Secure authentication** (login required)
 - **CloudFront + Lambda@Edge** protection
 - Real-time cost calculations
-- Keep/Remove decision tracking
+- Decision tracking (Keep, Remove, Notify, Schedule, Resize, Lifecycle)
 - Export to CSV
 - Mobile-responsive design
-- Shows filters, charts, history
+- Shows filters and history
 
 ### Documentation
 - Architecture & design decisions
@@ -191,9 +191,9 @@ Any time  → Users review findings and approve actions in dashboard
 - No direct S3 bucket access
 
 **Layer 2: User Decision**
-- User explicitly clicks [Keep] or [Remove]
+- User explicitly chooses [Keep], [Remove], [Notify], [Schedule], [Resize], or [Lifecycle]
 - Can change decision before execution
-- Fully reversible until 6 AM
+- Fully reversible until the next scheduler run window
 
 **Layer 3: Tag-Based Protection**
 - Resources tagged `Environment=prod` → PROTECTED
@@ -257,14 +257,14 @@ Usually **same month** - savings exceed deployment cost on day 1
 │  (STS assume-role per account)          │
 └──────────────────┬──────────────────────┘
                    │
-         ┌─────────┼─────────┬──────────┐
-         │         │         │          │
-    ┌────▼──┐ ┌──▼────┐ ┌──▼────┐ ┌──▼─────┐
-    │  EBS  │ │  EC2  │ │  S3   │ │CloudWatch
-    │Analyzer│ │Analyzer│ │Analyzer│ │Analyzer
-    └────┬──┘ └──┬────┘ └──┬────┘ └──┬─────┘
-         │         │         │         │
-         └─────────┼─────────┼─────────┘
+            ┌─────────┼─────────┬──────────┐
+            │         │         │
+          ┌────▼──┐ ┌──▼────┐ ┌──▼────┐
+          │  EBS  │ │  EC2  │ │  S3   │
+          │Analyzer│ │Analyzer│ │Analyzer│
+          └────┬──┘ └──┬────┘ └──┬────┘
+            │         │         │
+            └─────────┼─────────┘
                    │
          ┌─────────▼──────────┐
          │   Report Generator  │
@@ -298,23 +298,25 @@ Users access secure dashboard URL:
 
 ### Step 4: Review Findings
 Users see:
-- 42 findings with exact costs
+- findings with estimated monthly and annual savings
 - Real-time savings calculation
 - Filters by type/severity/region
-- Keep/Remove buttons
+- action options for Keep, Remove, Notify, Schedule, Resize, and Lifecycle workflows
 
 ### Step 5: Make Decisions
 Users click buttons:
-- [Keep] → Resource protected forever
-- [Remove] → Marked for deletion
+- [Keep] → Exclude from automated execution
+- [Remove] → Mark supported resources for removal
+- [Notify] → Send stakeholder notification
+- [Schedule] / [Resize] / [Lifecycle] → Apply optimization workflows when supported
 
 Dashboard updates instantly showing total savings.
 
 ### Step 6: Automatic Execution
-At 6 AM UTC (configurable), Scheduler Lambda:
+At the configured scheduler windows (defaults 6 AM and 6 PM UTC), Scheduler Lambda:
 - Reads user decisions from S3
 - Checks safety (tags, policies)
-- Executes approved deletions
+- Executes approved supported actions (remove, schedule, and S3 lifecycle workflows)
 - Logs everything
 - Sends summary email
 
@@ -397,7 +399,7 @@ Dashboard shows findings from ALL accounts with regional breakdown.
 - Measurable cost reduction
 
 **Month 1:**
-- $10K-50K+ in verified savings
+- Measured savings baseline and trend visibility
 - Full audit trail
 - Dashboard history
 
@@ -434,7 +436,7 @@ AWS provides strong recommendation engines, but recommendations are distributed 
 
 This framework adds the operating layer needed to safely act on those insights:
 - One consolidated workflow for findings and actions
-- Human approval options (Keep, Remove, Notify Users)
+- Human approval options (Keep, Remove, Notify, Schedule, Rightsize, Lifecycle workflows)
 - Risk-aware guardrails for automation-managed resources
 - Decision tracking and auditability
 - Communication workflows before high-risk actions
@@ -444,8 +446,8 @@ In short: AWS tells you what might be optimized. This framework helps teams safe
 ### Is this replacing native AWS services?
 No. It complements them.
 
-AWS remains the source of telemetry and recommendations.
-This framework standardizes triage, governance, and action execution across teams and accounts.
+AWS services provide core telemetry and many recommendations.
+This framework also adds custom recommendation logic and standardizes triage, governance, and action execution across teams and accounts.
 
 ### What value does this add for enterprise teams?
 - **Governance**: explicit decision capture instead of ad-hoc cleanup
