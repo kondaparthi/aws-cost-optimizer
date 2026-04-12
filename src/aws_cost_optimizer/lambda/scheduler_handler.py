@@ -388,6 +388,42 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             actions["errors"].append(f"Failed to enable intelligent tiering on {bucket_name}: {ce}")
                             return False
 
+                    if workflow == "enable_bucket_key":
+                        try:
+                            encryption = region_s3.get_bucket_encryption(Bucket=bucket_name)
+                            rules = encryption.get("ServerSideEncryptionConfiguration", {}).get("Rules", [])
+                        except ClientError as ce:
+                            actions["errors"].append(f"Failed to read bucket encryption on {bucket_name}: {ce}")
+                            return False
+
+                        kms_rules_found = False
+                        for rule in rules:
+                            default_cfg = rule.get("ApplyServerSideEncryptionByDefault", {})
+                            if default_cfg.get("SSEAlgorithm") == "aws:kms":
+                                rule["BucketKeyEnabled"] = True
+                                kms_rules_found = True
+
+                        if not kms_rules_found:
+                            actions["errors"].append(
+                                f"Skipped bucket-key enablement for {bucket_name}: bucket is not configured for SSE-KMS"
+                            )
+                            return False
+
+                        if dry_run:
+                            actions["ui_s3_lifecycle_updated"].append(f"[DRY-RUN] {bucket_name}:bucket-key")
+                            return True
+
+                        try:
+                            region_s3.put_bucket_encryption(
+                                Bucket=bucket_name,
+                                ServerSideEncryptionConfiguration={"Rules": rules},
+                            )
+                            actions["ui_s3_lifecycle_updated"].append(f"{bucket_name}:bucket-key")
+                            return True
+                        except ClientError as ce:
+                            actions["errors"].append(f"Failed to enable bucket key on {bucket_name}: {ce}")
+                            return False
+
                     transition_days = int(details.get("transition_after_days") or 30)
                     glacier_days = int(details.get("glacier_after_days") or 90)
                     return _put_bucket_lifecycle_rule(

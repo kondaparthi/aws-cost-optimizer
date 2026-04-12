@@ -130,28 +130,9 @@ Everything deployed via CloudFormation:
 
 ### Daily Workflow
 ```
-2 AM UTC    → Analysis Lambda runs
-            → Scans all AWS resources
-            → Generates findings.json
-            → Uploads to S3
-            → Sends SNS notification
-
-User opens dashboard (any time)
-            → Views all findings
-            → Sees cost breakdown
-            → Clicks Keep/Remove
-            → Dashboard updates in real-time
-
-6 AM UTC    → Scheduler Lambda runs
-            → Reads user decisions
-            → Executes removals (with safety checks)
-            → Logs to CloudWatch
-            → Sends summary email
-
-Dashboard shows results
-            → What was removed
-            → Actual vs estimated savings
-            → History of all actions
+2 AM UTC  → Analysis Lambda runs and publishes findings
+Any time  → Users review findings and approve actions in dashboard
+6 AM UTC  → Scheduler Lambda executes approved actions with safety checks
 ```
 
 ---
@@ -297,16 +278,9 @@ Usually **same month** - savings exceed deployment cost on day 1
 ```
 
 ### Step 1: Deploy
-```bash
-./deploy.sh --stack-name cost-optimizer \
-  --config-bucket my-config \
-  --report-bucket my-reports \
-  --dashboard-bucket my-dashboard-12345 \
-  --admin-email admin@company.com \
-  --email ops@company.com
-```
+Use the command in the `Deployment` section above.
 
-Takes 5 minutes. Everything automated.
+Takes about 5 minutes. Everything is automated via CloudFormation.
 
 ### Step 2: Wait for Analysis (Next Morning)
 At 2 AM UTC, Lambda automatically:

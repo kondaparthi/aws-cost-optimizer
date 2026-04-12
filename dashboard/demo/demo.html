@@ -781,6 +781,166 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* ── Overview ─────────────────────────────────────────────── */
+        .overview-section {
+            padding: 28px 30px;
+        }
+
+        .resource-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+            gap: 20px;
+        }
+
+        .resource-card {
+            background: var(--panel-solid);
+            border: 1px solid var(--panel-border);
+            border-radius: 20px;
+            padding: 26px 24px 22px;
+            cursor: pointer;
+            transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            position: relative;
+        }
+
+        .resource-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 22px 44px rgba(15, 23, 42, 0.14);
+            border-color: var(--brand);
+        }
+
+        .resource-card .rc-arrow {
+            position: absolute;
+            top: 22px;
+            right: 20px;
+            font-size: 18px;
+            color: var(--muted);
+            transition: transform 0.2s ease, color 0.2s ease;
+        }
+
+        .resource-card:hover .rc-arrow {
+            transform: translateX(4px);
+            color: var(--brand);
+        }
+
+        .rc-icon {
+            width: 40px;
+            height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .rc-icon img {
+            width: 40px;
+            height: 40px;
+            object-fit: contain;
+            display: block;
+        }
+
+        .rc-type {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--heading);
+            padding-right: 28px;
+        }
+
+        .rc-savings-label {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 4px;
+        }
+
+        .rc-savings {
+            font-size: 30px;
+            font-weight: 700;
+            color: var(--success);
+        }
+
+        .rc-annual {
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .rc-annual strong { color: var(--success); }
+
+        .rc-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .rc-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 9px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .rc-chip.high   { background: var(--danger-soft);  color: var(--danger); }
+        .rc-chip.medium { background: var(--warning-soft); color: var(--warning); }
+        .rc-chip.low    { background: var(--brand-soft);   color: var(--brand); }
+        .rc-chip.count  {
+            background: var(--panel-muted);
+            color: var(--muted);
+            border: 1px solid var(--panel-border);
+        }
+
+        .rc-marked {
+            font-size: 12px;
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        /* ── Detail navigation ────────────────────────────────────── */
+        .detail-nav {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 30px 0;
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: var(--chip);
+            color: var(--chip-text);
+            border: 1px solid var(--panel-border);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: none;
+        }
+
+        .back-btn:hover {
+            transform: none;
+            background: var(--brand-soft);
+            color: var(--brand);
+            border-color: var(--brand);
+        }
+
+        .breadcrumb {
+            font-size: 14px;
+            color: var(--muted);
+        }
+
+        .breadcrumb .bc-active {
+            color: var(--heading);
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -819,7 +979,12 @@
             </div>
         </div>
 
-        <div class="controls">
+        <div id="detailNav" class="detail-nav" style="display:none;">
+            <button type="button" class="back-btn" onclick="goBack()">← Back to Overview</button>
+            <span class="breadcrumb">Overview <span style="margin:0 6px;color:var(--muted)">›</span> <span class="bc-active" id="detailNavLabel"></span></span>
+        </div>
+
+        <div class="controls" style="display:none;">
             <div class="filter-group">
                 <label>Filter by Type:</label>
                 <select id="typeFilter">
@@ -903,6 +1068,41 @@
         const DEMO_ACTIONS_STORAGE_KEY = 'demo-dashboard-actions';
         const DEMO_SCHEDULE_STORAGE_KEY = 'demo-dashboard-schedule-config';
         const DEMO_S3_WORKFLOW_STORAGE_KEY = 'demo-dashboard-s3-workflow-selections';
+        const ICON_BASE_PATH = 'assets/aws-icons/';
+
+        const RESOURCE_TYPE_CONFIG = [
+            {
+                key: 'EC2 Instance',
+                label: 'EC2 Instances',
+                icon_url: `${ICON_BASE_PATH}ec2.png`
+            },
+            {
+                key: 'Auto Scaling Group',
+                label: 'Auto Scaling Groups',
+                icon_url: `${ICON_BASE_PATH}ec2-auto-scaling.png`
+            },
+            {
+                key: 'EBS Volume',
+                label: 'EBS Volumes',
+                icon_url: `${ICON_BASE_PATH}ebs-volume.png`
+            },
+            {
+                key: 'EBS Snapshot',
+                label: 'EBS Snapshots',
+                icon_url: `${ICON_BASE_PATH}ebs-snapshot.png`
+            },
+            {
+                key: 'S3 Bucket',
+                label: 'S3 Buckets',
+                icon_url: `${ICON_BASE_PATH}s3-bucket.png`
+            },
+        ];
+
+        function toNumber(value) {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : 0;
+        }
+
         const themeToggle = document.getElementById('themeToggle');
         const themeIcon = document.getElementById('themeIcon');
         const themeLabel = document.getElementById('themeLabel');
@@ -935,6 +1135,8 @@
         let ebsActiveTab = 'recommendations';
         let manualS3Targets = [];
         let s3ActiveTab = 'recommendations';
+        let currentView = 'overview';   // 'overview' | 'detail'
+        let selectedDetailType = '';
         let scheduleConfigCache = {
             enabled: true,
             timezone: 'UTC',
@@ -945,11 +1147,6 @@
             ebs_manual_targets: [],
             s3_manual_targets: []
         };
-
-        function toNumber(value) {
-            const parsed = Number(value);
-            return Number.isFinite(parsed) ? parsed : 0;
-        }
 
         function getMonthlySavings(finding) {
             const monthly = toNumber(finding?.cost_monthly);
@@ -1066,7 +1263,8 @@
             return ({
                 lifecycle_transition: 'Transition To Cheaper Storage',
                 intelligent_tiering: 'Enable Intelligent Tier',
-                abort_incomplete_multipart: 'Delete Incomplete Multipart Upload'
+                abort_incomplete_multipart: 'Delete Incomplete Multipart Upload',
+                enable_bucket_key: 'Enable Bucket Key (SSE-KMS Cost Reduction)'
             })[workflow] || 'Set Lifecycle Policy';
         }
 
@@ -1084,6 +1282,7 @@
             }
 
             const workflows = [
+                'enable_bucket_key',
                 'intelligent_tiering',
                 'abort_incomplete_multipart',
                 'lifecycle_transition'
@@ -1195,7 +1394,106 @@
             document.getElementById('annualSavings').textContent = '$' + annualSavings.toFixed(2);
         }
 
+        function renderOverview() {
+            const container = document.getElementById('findingsList');
+            const controlsEl = document.querySelector('.controls');
+            if (controlsEl) controlsEl.style.display = 'none';
+            const nav = document.getElementById('detailNav');
+            if (nav) nav.style.display = 'none';
+
+            const allTypes = [...new Set(allFindings.map(f => f.type).filter(Boolean))];
+            const orderedTypes = [
+                ...RESOURCE_TYPE_CONFIG.filter(c => allTypes.includes(c.key)),
+                ...allTypes
+                    .filter(t => !RESOURCE_TYPE_CONFIG.some(c => c.key === t))
+                    .map(t => ({ key: t, icon_url: `${ICON_BASE_PATH}generic-resource.png`, label: t }))
+            ];
+
+            const cardsHtml = orderedTypes.map(typeConfig => {
+                const findings = allFindings.filter(f => f.type === typeConfig.key);
+                if (!findings.length) return '';
+
+                const monthly  = findings.reduce((s, f) => s + getMonthlySavings(f), 0);
+                const annual   = findings.reduce((s, f) => s + getAnnualSavings(f), 0);
+                const high     = findings.filter(f => f.severity === 'high').length;
+                const medium   = findings.filter(f => f.severity === 'medium').length;
+                const low      = findings.filter(f => f.severity === 'low').length;
+                const marked   = findings.filter(f => userActions[f.id]).length;
+
+                const chips = [
+                    `<span class="rc-chip count">${findings.length} finding${findings.length !== 1 ? 's' : ''}</span>`,
+                    high   > 0 ? `<span class="rc-chip high">● ${high} High</span>`    : '',
+                    medium > 0 ? `<span class="rc-chip medium">● ${medium} Med</span>` : '',
+                    low    > 0 ? `<span class="rc-chip low">● ${low} Low</span>`       : ''
+                ].filter(Boolean).join('');
+
+                const markedBadge = marked > 0
+                    ? `<div class="rc-marked">✓ ${marked} action${marked !== 1 ? 's' : ''} marked</div>`
+                    : '';
+
+                const iconMarkup = `<img src="${typeConfig.icon_url}" alt="${typeConfig.label} icon" loading="lazy" />`;
+
+                return `
+                    <div class="resource-card" onclick="openDetail('${typeConfig.key.replace(/'/g, '\\x27')}')">
+                        <span class="rc-arrow">›</span>
+                        <div class="rc-icon">${iconMarkup}</div>
+                        <div class="rc-type">${typeConfig.label}</div>
+                        <div>
+                            <div class="rc-savings-label">Potential Monthly Savings</div>
+                            <div class="rc-savings">$${monthly.toFixed(2)}</div>
+                        </div>
+                        <div class="rc-meta">${chips}</div>
+                        <div class="rc-annual">Annual: <strong>$${annual.toFixed(2)}</strong></div>
+                        ${markedBadge}
+                    </div>`;
+            }).join('');
+
+            container.innerHTML = `
+                <div class="overview-section">
+                    <div style="margin-bottom:20px;">
+                        <span style="font-size:17px;font-weight:700;color:var(--heading);">Resource Breakdown</span>
+                        <span style="font-size:13px;color:var(--muted);margin-left:10px;">Click a card to review findings and take action</span>
+                    </div>
+                    <div class="resource-cards">
+                        ${cardsHtml || '<div class="loading"><p>No findings to display.</p></div>'}
+                    </div>
+                </div>`;
+        }
+
+        function openDetail(resourceType) {
+            currentView = 'detail';
+            selectedDetailType = resourceType;
+
+            const controlsEl = document.querySelector('.controls');
+            if (controlsEl) controlsEl.style.display = '';
+
+            const nav = document.getElementById('detailNav');
+            if (nav) nav.style.display = 'flex';
+
+            const label = document.getElementById('detailNavLabel');
+            if (label) {
+                const cfg = RESOURCE_TYPE_CONFIG.find(c => c.key === resourceType);
+                label.textContent = cfg ? cfg.label : resourceType;
+            }
+
+            document.getElementById('typeFilter').value = resourceType;
+            renderFindings();
+        }
+
+        function goBack() {
+            currentView = 'overview';
+            selectedDetailType = '';
+            document.getElementById('typeFilter').value = '';
+            renderFindings();
+        }
+
         function renderFindings() {
+            if (currentView === 'overview') {
+                renderOverview();
+                updateActionCounter();
+                updateTotalSavings();
+                return;
+            }
             const container = document.getElementById('findingsList');
             const currentScheduleConfig = getScheduleConfig();
             const typeFilter = document.getElementById('typeFilter').value;
@@ -1511,6 +1809,7 @@
                     <div class="manual-targets">
                         <div class="manual-target-row">
                             <select id="manualS3Workflow">
+                                <option value="enable_bucket_key">Enable Bucket Key (SSE-KMS Cost Reduction)</option>
                                 <option value="intelligent_tiering">Enable Intelligent Tier</option>
                                 <option value="abort_incomplete_multipart">Delete Incomplete Multipart Upload</option>
                                 <option value="lifecycle_transition">Transition To Cheaper Storage</option>
@@ -1949,12 +2248,11 @@
         }
 
         function resetFilters() {
-            document.getElementById('typeFilter').value = '';
             document.getElementById('severityFilter').value = '';
             document.getElementById('statusFilter').value = '';
             document.getElementById('orphanOnlyFilter').checked = false;
             document.getElementById('searchFilter').value = '';
-            renderFindings();
+            goBack();
         }
 
         function saveActions() {

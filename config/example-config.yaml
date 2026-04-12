@@ -60,6 +60,7 @@ thresholds:
     infrequent_access_days: 30   # Suggest storage class change if >N days old
     recommend_lifecycle_policies: true
     recommend_intelligent_tiering: true
+    recommend_bucket_key: true   # Suggest enabling S3 Bucket Keys for SSE-KMS buckets
     recommend_unused_bucket_delete: true
     lifecycle_min_size_gb: 100
     intelligent_tiering_min_size_gb: 128

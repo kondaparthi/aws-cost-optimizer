@@ -22,6 +22,7 @@ class S3Analyzer(BaseAnalyzer):
         check_multipart = bool(s3_config.get("check_incomplete_multipart", True))
         recommend_lifecycle = bool(s3_config.get("recommend_lifecycle_policies", True))
         recommend_intelligent_tiering = bool(s3_config.get("recommend_intelligent_tiering", True))
+        recommend_bucket_key = bool(s3_config.get("recommend_bucket_key", True))
         recommend_unused_delete = bool(s3_config.get("recommend_unused_bucket_delete", True))
         lifecycle_min_size_gb = float(s3_config.get("lifecycle_min_size_gb", 100))
         intelligent_tiering_min_size_gb = float(s3_config.get("intelligent_tiering_min_size_gb", 128))
@@ -51,9 +52,11 @@ class S3Analyzer(BaseAnalyzer):
                     continue
 
                 lifecycle_config = self._get_lifecycle_configuration(s3_client, bucket_name)
+                encryption_config = self._get_bucket_encryption_configuration(s3_client, bucket_name)
                 has_abort_rule = self._has_abort_incomplete_rule(lifecycle_config)
                 has_transition_rule = self._has_transition_rule(lifecycle_config)
                 has_intelligent_tiering = self._has_intelligent_tiering_configuration(s3_client, bucket_name)
+                bucket_encryption_state = self._get_bucket_encryption_state(encryption_config)
                 bucket_stats = self._inspect_bucket_objects(s3_client, bucket_name, object_scan_limit)
 
                 if check_multipart:
@@ -83,6 +86,15 @@ class S3Analyzer(BaseAnalyzer):
                         bucket_stats=bucket_stats,
                         intelligent_tiering_min_size_gb=intelligent_tiering_min_size_gb,
                         has_intelligent_tiering=has_intelligent_tiering,
+                        result=result,
+                    )
+
+                if recommend_bucket_key:
+                    self._add_bucket_key_finding(
+                        bucket_name=bucket_name,
+                        tags=tags,
+                        bucket_stats=bucket_stats,
+                        encryption_state=bucket_encryption_state,
                         result=result,
                     )
 
@@ -332,6 +344,52 @@ class S3Analyzer(BaseAnalyzer):
         )
         result.add_finding(finding)
 
+    def _add_bucket_key_finding(
+        self,
+        bucket_name: str,
+        tags: Dict[str, str],
+        bucket_stats: Dict[str, Any],
+        encryption_state: Dict[str, Any],
+        result: AnalyzerResult,
+    ) -> None:
+        if not encryption_state.get("uses_kms"):
+            return
+        if encryption_state.get("bucket_key_enabled"):
+            return
+
+        estimated_size_gb = bucket_stats.get("estimated_size_gb", 0.0)
+        baseline_monthly_cost = self.cost_calculator.s3_storage_cost(estimated_size_gb, "standard")
+        savings_monthly = max(0.5, baseline_monthly_cost * 0.05)
+
+        finding = Finding(
+            resource_id=bucket_name,
+            resource_type="S3 Bucket",
+            account_id=self.account_id,
+            region=self.region,
+            issue="SSE-KMS is enabled but S3 Bucket Key is not enabled",
+            recommendation=(
+                "Enable Bucket Key - Reducing the cost of SSE-KMS with Amazon S3 Bucket Keys. "
+                f"Estimated savings: ${savings_monthly:.2f}/month."
+            ),
+            severity="low",
+            current_monthly_cost=baseline_monthly_cost,
+            potential_savings_monthly=savings_monthly,
+            potential_savings_annual=savings_monthly * 12,
+            resource_tags=tags,
+            details={
+                "bucket_name": bucket_name,
+                "recommended_action": "lifecycle",
+                "s3_workflow": "enable_bucket_key",
+                "allowed_actions": ["notify", "lifecycle"],
+                "kms_key_id": encryption_state.get("kms_key_id"),
+                "estimated_size_gb": round(estimated_size_gb, 2),
+                "object_count_sampled": bucket_stats.get("object_count_sampled", 0),
+                "scan_truncated": bucket_stats.get("scan_truncated", False),
+                "supports_custom": True,
+            },
+        )
+        result.add_finding(finding)
+
     def _get_bucket_tags(self, s3_client, bucket_name: str) -> Dict[str, str]:
         try:
             tags_response = s3_client.get_bucket_tagging(Bucket=bucket_name)
@@ -347,6 +405,43 @@ class S3Analyzer(BaseAnalyzer):
             if code in {"NoSuchLifecycleConfiguration", "NoSuchBucket"}:
                 return {}
             raise
+
+    def _get_bucket_encryption_configuration(self, s3_client, bucket_name: str) -> Dict[str, Any]:
+        try:
+            response = s3_client.get_bucket_encryption(Bucket=bucket_name)
+            return response.get("ServerSideEncryptionConfiguration", {})
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code")
+            if code in {
+                "ServerSideEncryptionConfigurationNotFoundError",
+                "NoSuchBucket",
+                "AccessDenied",
+            }:
+                return {}
+            raise
+
+    def _get_bucket_encryption_state(self, encryption_config: Dict[str, Any]) -> Dict[str, Any]:
+        kms_rules = []
+        for rule in encryption_config.get("Rules", []):
+            default_cfg = rule.get("ApplyServerSideEncryptionByDefault", {})
+            if default_cfg.get("SSEAlgorithm") == "aws:kms":
+                kms_rules.append(rule)
+
+        if not kms_rules:
+            return {
+                "uses_kms": False,
+                "bucket_key_enabled": False,
+                "kms_key_id": None,
+            }
+
+        bucket_key_enabled = all(rule.get("BucketKeyEnabled", False) for rule in kms_rules)
+        kms_key_id = kms_rules[0].get("ApplyServerSideEncryptionByDefault", {}).get("KMSMasterKeyID")
+
+        return {
+            "uses_kms": True,
+            "bucket_key_enabled": bucket_key_enabled,
+            "kms_key_id": kms_key_id,
+        }
 
     def _has_abort_incomplete_rule(self, lifecycle_config: Dict[str, Any]) -> bool:
         for rule in lifecycle_config.get("Rules", []):
