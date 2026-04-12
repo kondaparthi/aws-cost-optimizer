@@ -117,69 +117,13 @@ One-time setup (5 minutes):
   --email ops@company.com
 ```
 
-Everything deployed via CloudFormation:
-- Lambda functions (analysis + scheduler)
-- EventBridge rules (daily triggers)
-- S3 buckets (reports + dashboard)
-- CloudFront distribution (secure dashboard access)
-- Cognito User Pool (authentication)
-- Lambda@Edge (request authentication)
-- IAM roles (least-privilege)
-- CloudWatch monitoring
-- SNS notifications
-
 ### Daily Workflow
 ```
 2 AM UTC  → Analysis Lambda runs and publishes findings
 Any time  → Users review findings and approve actions in dashboard
 6 AM UTC  → Scheduler Lambda executes approved actions with safety checks
 ```
-
 ---
-## What's Included
-
-**Core Framework:**
-- ConfigLoader: Multi-region/multi-account configuration
-- AWSClient: STS role assumption with session caching
-- StructuredLogger: JSON audit logging for compliance
-- SkipPolicy: Tag-based resource protection
-- DryRunMode: Safety context manager
-
-**Analyzers (3 Production-Ready):**
-- EBSAnalyzer: Unattached volumes & old snapshots
-- EC2Analyzer: Idle instances via CloudWatch metrics
-- S3Analyzer: Lifecycle transitions, Intelligent-Tiering, multipart cleanup, and stale bucket delete candidates
-
-**Lambda Functions (2 Complete):**
-- analysis_handler.py: Nightly analysis (generates findings.json)
-- scheduler_handler.py: Action execution (supported remove, schedule, and S3 lifecycle workflows)
-
-**Infrastructure:**
-- CloudFormation templates (3 complete templates)
-- Deployment automation script
-- GitHub Actions CI/CD pipelines
-
-### Web Dashboard
-- Interactive HTML/CSS/JavaScript
-- **Secure authentication** (login required)
-- **CloudFront + Lambda@Edge** protection
-- Real-time cost calculations
-- Decision tracking (Keep, Remove, Notify, Schedule, Resize, Lifecycle)
-- Export to CSV
-- Mobile-responsive design
-- Shows filters and history
-
-### Documentation
-- Architecture & design decisions
-- Deployment guide (step-by-step)
-- CI/CD integration guide
-- LocalStack deployment and compatibility guide
-- Configuration reference
-- Real-world examples
-- Troubleshooting guide
-
----
-
 ## Safety & Compliance
 
 ### Five-Layer Protection
@@ -244,91 +188,6 @@ Usually **same month** - savings exceed deployment cost on day 1
 
 ---
 
-## How It Works
-
-
-```
-┌─────────────────────────────────────────┐
-│  Config (YAML) + Skip Policies          │
-└──────────────────┬──────────────────────┘
-                   │
-┌──────────────────▼──────────────────────┐
-│  Multi-Account Orchestrator             │
-│  (STS assume-role per account)          │
-└──────────────────┬──────────────────────┘
-                   │
-            ┌─────────┼─────────┬──────────┐
-            │         │         │
-          ┌────▼──┐ ┌──▼────┐ ┌──▼────┐
-          │  EBS  │ │  EC2  │ │  S3   │
-          │Analyzer│ │Analyzer│ │Analyzer│
-          └────┬──┘ └──┬────┘ └──┬────┘
-            │         │         │
-            └─────────┼─────────┘
-                   │
-         ┌─────────▼──────────┐
-         │   Report Generator  │
-         │  JSON/CSV/HTML      │
-         └─────────┬───────────┘
-                   │
-           ┌───────▼────────┐
-           │  Output (S3)    │
-           │ or local /dir   │
-           └─────────────────┘
-```
-
-### Step 1: Deploy
-Use the command in the `Deployment` section above.
-
-Takes about 5 minutes. Everything is automated via CloudFormation.
-
-### Step 2: Wait for Analysis (Next Morning)
-At 2 AM UTC, Lambda automatically:
-- Scans all EBS volumes
-- Checks EC2 CPU metrics
-- Finds S3 issues
-- Generates findings.json
-- Uploads to S3
-
-### Step 3: Login to Dashboard
-Users access secure dashboard URL:
-- Authenticate with username/password
-- Session managed automatically
-- HTTPS enforced via CloudFront
-
-### Step 4: Review Findings
-Users see:
-- findings with estimated monthly and annual savings
-- Real-time savings calculation
-- Filters by type/severity/region
-- action options for Keep, Remove, Notify, Schedule, Resize, and Lifecycle workflows
-
-### Step 5: Make Decisions
-Users click buttons:
-- [Keep] → Exclude from automated execution
-- [Remove] → Mark supported resources for removal
-- [Notify] → Send stakeholder notification
-- [Schedule] / [Resize] / [Lifecycle] → Apply optimization workflows when supported
-
-Dashboard updates instantly showing total savings.
-
-### Step 6: Automatic Execution
-At the configured scheduler windows (defaults 6 AM and 6 PM UTC), Scheduler Lambda:
-- Reads user decisions from S3
-- Checks safety (tags, policies)
-- Executes approved supported actions (remove, schedule, and S3 lifecycle workflows)
-- Logs everything
-- Sends summary email
-
-### Step 7: Track Results
-Dashboard shows:
-- What was actually removed
-- Actual vs estimated savings
-- History of all actions
-- Cost impact
-
----
-
 ## Multi-Account Support
 
 ### For Organizations with Multiple AWS Accounts
@@ -379,32 +238,6 @@ Dashboard shows findings from ALL accounts with regional breakdown.
 ✅ **MSPs managing customer AWS accounts**  
 
 ---
-
-## What You Get
-
-**Immediate (After Deploy):**
-- Fully functional cost analysis system
-- **Secure web dashboard** (login required)
-- Daily automated analysis
-- SNS notifications
-
-**Day 1-2:**
-- First findings report
-- Cost breakdown by resource type
-- Savings opportunities identified
-
-**Week 1:**
-- User decisions recorded
-- Automatic optimizations executing
-- Measurable cost reduction
-
-**Month 1:**
-- Measured savings baseline and trend visibility
-- Full audit trail
-- Dashboard history
-
----
-
 ## Demo Dashboard
 
 Experience the cost optimizer with realistic synthetic data:
@@ -429,7 +262,7 @@ Perfect for understanding the optimization workflow before production deployment
 
 ---
 
-## FAQs for Clients and Stakeholders
+## FAQs
 
 ### If AWS already has cost tools, why use this framework?
 AWS provides strong recommendation engines, but recommendations are distributed across different services and often stop at insight.
