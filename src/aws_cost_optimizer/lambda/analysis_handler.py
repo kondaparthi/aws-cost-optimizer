@@ -21,7 +21,7 @@ sys.path.insert(0, '/var/task')  # Lambda function root
 from aws_cost_optimizer.core import (
     ConfigLoader, AWSClient, StructuredLogger, SkipPolicy
 )
-from aws_cost_optimizer.models import FindingsReport
+from aws_cost_optimizer.models import FindingsReport, Finding as ReportFinding
 from aws_cost_optimizer.analyzers.ebs_analyzer import EBSAnalyzer
 from aws_cost_optimizer.analyzers.ec2_analyzer import EC2Analyzer
 from aws_cost_optimizer.analyzers.s3_analyzer import S3Analyzer
@@ -39,6 +39,52 @@ sfn_client = boto3.client("stepfunctions")
 # Issue #10: Stop processing new accounts/regions when fewer than this many
 # seconds remain in the Lambda execution window.
 TIMEOUT_SAFETY_MARGIN_SECONDS = 30
+
+
+def _infer_dashboard_action(analyzer_finding: Any) -> str:
+    details = analyzer_finding.details or {}
+    recommended_action = details.get("recommended_action")
+    if recommended_action:
+        return recommended_action
+
+    resource_type = analyzer_finding.resource_type
+    recommendation = (analyzer_finding.recommendation or "").lower()
+
+    if resource_type == "EC2 Instance":
+        if details.get("recommended_instance_type"):
+            return "resize"
+        if "schedule" in recommendation:
+            return "schedule"
+        return "stop"
+
+    if resource_type in {"EBS Volume", "EBS Snapshot", "Auto Scaling Group"}:
+        return "delete"
+
+    if resource_type == "S3 Bucket":
+        workflow = details.get("s3_workflow")
+        if workflow == "safe_delete":
+            return "delete"
+        if workflow:
+            return "lifecycle"
+
+    return "review"
+
+
+def _to_report_finding(analyzer_finding: Any) -> ReportFinding:
+    return ReportFinding(
+        id=analyzer_finding.resource_id,
+        type=analyzer_finding.resource_type,
+        issue=analyzer_finding.issue,
+        region=analyzer_finding.region,
+        account_id=analyzer_finding.account_id,
+        cost_monthly=round(float(analyzer_finding.potential_savings_monthly or 0.0), 2),
+        cost_annual=round(float(analyzer_finding.potential_savings_annual or 0.0), 2),
+        severity=analyzer_finding.severity,
+        action=_infer_dashboard_action(analyzer_finding),
+        tags=analyzer_finding.resource_tags or {},
+        details=analyzer_finding.details or {},
+        discovered_at=analyzer_finding.discovered_at,
+    )
 
 
 class LambdaConfigLoader:
@@ -215,7 +261,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         
                         # Add findings to report
                         for finding in result.findings:
-                            findings_report.add_finding(finding)
+                            findings_report.add_finding(_to_report_finding(finding))
                         
                         # Track errors
                         findings_report.errors.extend(result.errors)

@@ -8,6 +8,8 @@ import logging
 import os
 from typing import Dict, Any, Optional
 import boto3
+from datetime import datetime
+from botocore.exceptions import ClientError
 
 from aws_cost_optimizer.utils.auth import (
     authenticate_user,
@@ -24,6 +26,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 sns_client = boto3.client('sns')
+s3_client = boto3.client('s3')
 
 
 def _get_session_user(event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -416,6 +419,144 @@ def notify_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
 
 
+def _get_actions_bucket_and_key() -> Optional[Dict[str, str]]:
+    bucket = os.environ.get('DECISIONS_S3_BUCKET')
+    key = os.environ.get('DECISIONS_ACTIONS_KEY', 'actions/actions-latest.json')
+    if not bucket:
+        return None
+    return {'bucket': bucket, 'key': key}
+
+
+def save_actions_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """Persist UI actions and schedule settings to S3 for scheduler execution."""
+    try:
+        user_info = _get_session_user(event)
+        if not user_info:
+            return {
+                'statusCode': 401,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'error': 'Unauthorized'})
+            }
+
+        target = _get_actions_bucket_and_key()
+        if not target:
+            return {
+                'statusCode': 500,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'error': 'Decisions bucket is not configured'})
+            }
+
+        body = json.loads(event.get('body') or '{}') if isinstance(event.get('body'), str) else (event.get('body') or {})
+        items = body.get('items') or []
+        schedule_config = body.get('schedule_config') or {}
+
+        payload = {
+            'generated_at': datetime.utcnow().isoformat(),
+            'updated_by': {
+                'username': user_info.get('username'),
+                'email': user_info.get('email')
+            },
+            'schedule_config': {
+                'timezone': schedule_config.get('timezone', 'UTC'),
+                'business_start': schedule_config.get('business_start', '08:00'),
+                'business_end': schedule_config.get('business_end', '18:00'),
+                'off_days': schedule_config.get('off_days', [5, 6]),
+                'enabled': bool(schedule_config.get('enabled', True)),
+                'manual_targets': schedule_config.get('manual_targets', []),
+                'ebs_manual_targets': schedule_config.get('ebs_manual_targets', []),
+                's3_manual_targets': schedule_config.get('s3_manual_targets', [])
+            },
+            'items': items
+        }
+
+        s3_client.put_object(
+            Bucket=target['bucket'],
+            Key=target['key'],
+            Body=json.dumps(payload, indent=2),
+            ContentType='application/json'
+        )
+
+        return {
+            'statusCode': 200,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({
+                'message': 'Actions saved successfully',
+                'bucket': target['bucket'],
+                'key': target['key'],
+                'items_count': len(items)
+            })
+        }
+
+    except json.JSONDecodeError:
+        return {
+            'statusCode': 400,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({'error': 'Invalid JSON'})
+        }
+    except Exception as e:
+        logger.error(f"Save actions handler error: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({'error': 'Internal server error'})
+        }
+
+
+def get_actions_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """Load saved UI actions and schedule settings from S3."""
+    try:
+        user_info = _get_session_user(event)
+        if not user_info:
+            return {
+                'statusCode': 401,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'error': 'Unauthorized'})
+            }
+
+        target = _get_actions_bucket_and_key()
+        if not target:
+            return {
+                'statusCode': 500,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'error': 'Decisions bucket is not configured'})
+            }
+
+        try:
+            response = s3_client.get_object(Bucket=target['bucket'], Key=target['key'])
+            payload = json.loads(response['Body'].read().decode('utf-8'))
+        except ClientError as e:
+            if e.response.get('Error', {}).get('Code') != 'NoSuchKey':
+                raise
+            payload = {
+                'generated_at': datetime.utcnow().isoformat(),
+                'schedule_config': {
+                    'timezone': 'UTC',
+                    'business_start': '08:00',
+                    'business_end': '18:00',
+                    'off_days': [5, 6],
+                    'enabled': True,
+                    'manual_targets': [],
+                    'ebs_manual_targets': [],
+                    's3_manual_targets': []
+                },
+                'items': []
+            }
+
+        return {
+            'statusCode': 200,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps(payload)
+        }
+
+    except Exception as e:
+        logger.error(f"Get actions handler error: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({'error': 'Internal server error'})
+        }
+
+
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Main Lambda handler for authentication endpoints.
@@ -452,6 +593,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             response = logout_handler(event, context)
         elif path == '/auth/notify' and method == 'POST':
             response = notify_handler(event, context)
+        elif path == '/auth/actions' and method == 'POST':
+            response = save_actions_handler(event, context)
+        elif path == '/auth/actions' and method == 'GET':
+            response = get_actions_handler(event, context)
         else:
             response = {
                 'statusCode': 404,

@@ -80,6 +80,12 @@
         "Team": "backend-services",
         "Owner": "john.doe@company.com"
       },
+      "details": {
+        "recommended_instance_type": "t3.large",
+        "managed_by": "manual",
+        "stack_name": "",
+        "migration_instructions": "Create AMI backup, stop instance, modify instance type to t3.large, start instance, validate app health."
+      },
       "region": "us-east-1",
       "account_id": "123456789012",
       "resource_arn": "arn:aws:ec2:us-east-1:123456789012:instance/i-0abcd123456789ef0"
@@ -97,8 +103,15 @@
         "Name": "prod-web-cluster-03",
         "Environment": "production",
         "Application": "web-frontend",
+        "aws:cloudformation:stack-name": "prod-web-stack",
         "AutoScalingGroup": "web-asg-prod",
         "LoadBalancer": "prod-web-alb"
+      },
+      "details": {
+        "recommended_instance_type": "c5.xlarge",
+        "managed_by": "cloudformation",
+        "stack_name": "prod-web-stack",
+        "migration_instructions": "Update instance type in CloudFormation stack prod-web-stack and deploy change set to avoid drift."
       },
       "region": "us-west-2",
       "account_id": "123456789012",
@@ -120,6 +133,13 @@
         "Schedule": "business-hours",
         "Team": "data-engineering"
       },
+      "details": {
+        "schedule_policy": "business-hours",
+        "timezone": "UTC",
+        "business_start": "08:00",
+        "business_end": "18:00",
+        "off_days": [5, 6]
+      },
       "region": "eu-west-1",
       "account_id": "987654321098",
       "resource_arn": "arn:aws:ec2:eu-west-1:987654321098:instance/i-0123456789abcdef1"
@@ -139,6 +159,12 @@
         "Application": "postgresql",
         "Database": "user-data",
         "Backup": "enabled"
+      },
+      "details": {
+        "recommended_instance_type": "r5.medium",
+        "managed_by": "manual",
+        "stack_name": "",
+        "migration_instructions": "Take snapshot/backup, stop instance, change to r5.medium, start and validate connection pool and latency."
       },
       "region": "ap-southeast-1",
       "account_id": "555666777888",
@@ -180,6 +206,15 @@
         "Retention": "7years",
         "Compliance": "required"
       },
+      "details": {
+        "bucket_name": "my-company-prod-logs-2024",
+        "recommended_action": "lifecycle",
+        "s3_workflow": "lifecycle_transition",
+        "allowed_actions": ["notify", "lifecycle"],
+        "estimated_size_gb": 2355,
+        "lifecycle_template": "storage_savings",
+        "supports_custom": true
+      },
       "region": "us-east-1",
       "account_id": "123456789012",
       "resource_arn": "arn:aws:s3:::my-company-prod-logs-2024"
@@ -200,6 +235,15 @@
         "Retention": "30days",
         "Team": "platform"
       },
+      "details": {
+        "bucket_name": "staging-app-backups",
+        "recommended_action": "lifecycle",
+        "s3_workflow": "intelligent_tiering",
+        "allowed_actions": ["notify", "lifecycle"],
+        "estimated_size_gb": 890,
+        "lifecycle_template": "intelligent_tiering",
+        "supports_custom": true
+      },
       "region": "us-west-2",
       "account_id": "123456789012",
       "resource_arn": "arn:aws:s3:::staging-app-backups"
@@ -212,16 +256,56 @@
       "cost_monthly": 7.80,
       "cost_annual": 93.60,
       "severity": "low",
-      "action": "cleanup",
+      "action": "lifecycle",
       "tags": {
         "Name": "dev-uploads",
         "Environment": "development",
         "Purpose": "file-uploads",
         "Team": "frontend"
       },
+      "details": {
+        "bucket_name": "dev-multipart-uploads",
+        "recommended_action": "lifecycle",
+        "s3_workflow": "abort_incomplete_multipart",
+        "allowed_actions": ["notify", "lifecycle"],
+        "incomplete_count": 42,
+        "estimated_size_gb": 156,
+        "abort_after_days": 7,
+        "supports_custom": true
+      },
       "region": "eu-west-1",
       "account_id": "987654321098",
       "resource_arn": "arn:aws:s3:::dev-multipart-uploads"
+    },
+    {
+      "id": "legacy-finance-exports-archive",
+      "type": "S3 Bucket",
+      "issue": "Unused S3 bucket - bucket appears empty and no activity has been observed for more than 3 years",
+      "size_gb": 0,
+      "cost_monthly": 0.50,
+      "cost_annual": 6.00,
+      "severity": "low",
+      "action": "delete",
+      "tags": {
+        "Name": "finance-exports-archive",
+        "Environment": "legacy",
+        "Purpose": "exports",
+        "Owner": "finance-ops"
+      },
+      "details": {
+        "bucket_name": "legacy-finance-exports-archive",
+        "recommended_action": "remove",
+        "s3_workflow": "safe_delete",
+        "allowed_actions": ["notify", "remove"],
+        "estimated_size_gb": 0,
+        "last_activity_at": "2022-01-15T00:00:00",
+        "unused_bucket_days": 1095,
+        "allow_remove": true,
+        "delete_candidate": true
+      },
+      "region": "us-east-1",
+      "account_id": "123456789012",
+      "resource_arn": "arn:aws:s3:::legacy-finance-exports-archive"
     },
     {
       "id": "prod-app-logs-group",

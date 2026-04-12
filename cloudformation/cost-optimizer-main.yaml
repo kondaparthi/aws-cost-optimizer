@@ -864,6 +864,8 @@ Resources:
           COGNITO_CLIENT_ID: !Ref CognitoUserPoolClient
           ALLOWED_DASHBOARD_GROUPS: "dashboard-users,admin"
           SNS_TOPIC_ARN: !GetAtt CostOptimizerTopic.TopicArn
+          DECISIONS_S3_BUCKET: !Ref DecisionsS3Bucket
+          DECISIONS_ACTIONS_KEY: actions/actions-latest.json
           CORS_ORIGIN: !Sub "https://${CloudFrontDistribution.DomainName}"
       Timeout: 30
 
@@ -897,6 +899,11 @@ Resources:
                 Action:
                   - sns:Publish
                 Resource: !GetAtt CostOptimizerTopic.TopicArn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub "arn:${AWS::Partition}:s3:::${DecisionsS3Bucket}/*"
 
   # ========================================================================
   # API Gateway for Auth Endpoints
@@ -952,6 +959,13 @@ Resources:
       RestApiId: !Ref AuthApiGateway
       ParentId: !Ref AuthApiGatewayResource
       PathPart: notify
+
+  AuthActionsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref AuthApiGateway
+      ParentId: !Ref AuthApiGatewayResource
+      PathPart: actions
 
   AuthLoginMethodWithPath:
     Type: AWS::ApiGateway::Method
@@ -1013,6 +1027,30 @@ Resources:
         IntegrationHttpMethod: POST
         Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthLambda.Arn}/invocations"
 
+  AuthActionsPostMethodWithPath:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AuthApiGateway
+      ResourceId: !Ref AuthActionsResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthLambda.Arn}/invocations"
+
+  AuthActionsGetMethodWithPath:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref AuthApiGateway
+      ResourceId: !Ref AuthActionsResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthLambda.Arn}/invocations"
+
   AuthApiGatewayDeployment:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
@@ -1021,6 +1059,8 @@ Resources:
       - AuthRefreshMethodWithPath
       - AuthLogoutMethodWithPath
       - AuthNotifyMethodWithPath
+      - AuthActionsPostMethodWithPath
+      - AuthActionsGetMethodWithPath
     Properties:
       RestApiId: !Ref AuthApiGateway
       StageName: prod

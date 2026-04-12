@@ -287,6 +287,95 @@
             margin-top: 4px;
         }
 
+        .schedule-config {
+            width: 100%;
+            margin-top: 10px;
+            padding: 12px;
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            background: var(--panel-muted);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .schedule-config label {
+            font-size: 13px;
+            color: var(--muted);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .manual-targets {
+            width: 100%;
+            margin-top: 8px;
+            display: grid;
+            gap: 8px;
+        }
+
+        .manual-target-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr auto;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .manual-target-list {
+            font-size: 12px;
+            color: var(--muted);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .manual-target-chip {
+            border: 1px solid var(--panel-border);
+            border-radius: 999px;
+            padding: 4px 10px;
+            background: var(--panel-solid);
+        }
+
+        .ec2-tabs,
+        .ebs-tabs,
+        .s3-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .ec2-tab-btn,
+        .ebs-tab-btn,
+        .s3-tab-btn {
+            background: var(--chip);
+            color: var(--chip-text);
+            box-shadow: none;
+            border: 1px solid var(--panel-border);
+        }
+
+        .ec2-tab-btn.active,
+        .ebs-tab-btn.active,
+        .s3-tab-btn.active {
+            background: linear-gradient(135deg, var(--brand) 0%, var(--brand-strong) 100%);
+            color: white;
+            box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
+        }
+
+        .ec2-tab-note,
+        .ebs-tab-note,
+        .s3-tab-note {
+            font-size: 13px;
+            color: var(--muted);
+            margin-top: 8px;
+        }
+
+        .custom-savings-summary {
+            margin-top: 10px;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
         select, input {
             padding: 10px 12px;
             border: 1px solid var(--input-border);
@@ -337,6 +426,26 @@
             box-shadow: 0 12px 24px rgba(217, 119, 6, 0.2);
         }
 
+        .action-buttons button.schedule {
+            background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%);
+            box-shadow: 0 12px 24px rgba(14, 165, 233, 0.2);
+        }
+
+        .action-buttons button.resize {
+            background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+            box-shadow: 0 12px 24px rgba(124, 58, 237, 0.2);
+        }
+
+        .action-buttons button.lifecycle {
+            background: linear-gradient(135deg, #0891b2 0%, #155e75 100%);
+            box-shadow: 0 12px 24px rgba(8, 145, 178, 0.2);
+        }
+
+        .action-buttons button.lifecycle.active {
+            outline: 2px solid rgba(8, 145, 178, 0.35);
+            transform: translateY(-1px);
+        }
+
         .findings-list {
             padding: 28px 30px;
         }
@@ -362,6 +471,11 @@
         .finding-item.marked-remove {
             border-left: 4px solid var(--success);
             background: linear-gradient(180deg, var(--panel-solid), var(--success-soft));
+        }
+
+        .finding-item.marked-lifecycle {
+            border-left: 4px solid #0891b2;
+            background: linear-gradient(180deg, var(--panel-solid), rgba(8, 145, 178, 0.08));
         }
 
         .finding-header {
@@ -489,6 +603,17 @@
             color: var(--warning);
         }
 
+        .action-status.schedule,
+        .action-status.resize {
+            background: var(--brand-soft);
+            color: var(--brand);
+        }
+
+        .action-status.lifecycle {
+            background: rgba(8, 145, 178, 0.14);
+            color: #0f766e;
+        }
+
         .risk-note {
             margin-top: 10px;
             font-size: 12px;
@@ -581,6 +706,55 @@
             background: var(--success-soft);
             color: var(--success);
             border-color: rgba(34, 197, 94, 0.18);
+        }
+
+        .warning-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            padding: 16px;
+        }
+
+        .warning-modal-backdrop.active {
+            display: flex;
+        }
+
+        .warning-modal {
+            width: min(520px, 100%);
+            background: var(--panel-solid);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+            padding: 18px;
+        }
+
+        .warning-modal h3 {
+            color: var(--heading);
+            margin-bottom: 8px;
+            font-size: 18px;
+        }
+
+        .warning-modal p {
+            color: var(--text);
+            line-height: 1.5;
+            font-size: 14px;
+        }
+
+        .warning-modal-actions {
+            margin-top: 14px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .warning-modal-actions .danger {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+            box-shadow: 0 10px 20px rgba(220, 38, 38, 0.2);
         }
 
         @media (max-width: 768px) {
@@ -677,6 +851,9 @@
                     <option value="keep">Keep</option>
                     <option value="remove">Remove</option>
                     <option value="notify">Notify</option>
+                    <option value="schedule">Schedule</option>
+                    <option value="resize">Resize</option>
+                    <option value="lifecycle">Lifecycle</option>
                 </select>
             </div>
 
@@ -716,6 +893,17 @@
         </div>
     </div>
 
+    <div class="warning-modal-backdrop" id="removeWarningModal" role="dialog" aria-modal="true" aria-labelledby="removeWarningTitle">
+        <div class="warning-modal">
+            <h3 id="removeWarningTitle">Confirm Remove Action</h3>
+            <p id="removeWarningMessage">This action can cause drift for automation-managed resources. Continue?</p>
+            <div class="warning-modal-actions">
+                <button type="button" class="secondary" id="removeWarningCancel">Cancel</button>
+                <button type="button" class="danger" id="removeWarningConfirm">Proceed with Remove</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const RAW_AUTH_API_URL = '__AUTH_API_URL__';
         const THEME_STORAGE_KEY = 'dashboard-theme';
@@ -739,8 +927,27 @@
         let currentUser = null;
         let allFindings = [];
         let userActions = {};
+        let s3WorkflowSelections = {};
+        let manualScheduleTargets = [];
+        let manualEbsTargets = [];
+        let manualS3Targets = [];
+        let ec2ActiveTab = 'recommendations';
+        let ebsActiveTab = 'recommendations';
+        let s3ActiveTab = 'recommendations';
+        let scheduleConfigCache = {
+            enabled: true,
+            timezone: 'UTC',
+            business_start: '08:00',
+            business_end: '18:00',
+            off_days: [5, 6],
+            manual_targets: [],
+            ebs_manual_targets: [],
+            s3_manual_targets: []
+        };
         const reportsBucket = 'YOUR_REPORTS_BUCKET'; // Replaced by deploy script
         const LOCAL_ACTIONS_KEY = 'aco-dashboard-actions';
+        const LOCAL_SCHEDULE_KEY = 'aco-dashboard-schedule-config';
+        const LOCAL_S3_WORKFLOW_KEY = 'aco-dashboard-s3-workflow-selections';
 
         function toNumber(value) {
             const parsed = Number(value);
@@ -759,6 +966,136 @@
 
         function getAnnualSavings(finding) {
             return getMonthlySavings(finding) * 12;
+        }
+
+        function findEc2FindingByInstanceId(instanceId, region, accountId) {
+            const normalizedId = String(instanceId || '').trim().toLowerCase();
+            if (!normalizedId) {
+                return null;
+            }
+
+            return allFindings.find(finding => {
+                if (finding.type !== 'EC2 Instance') {
+                    return false;
+                }
+
+                const sameId = String(finding.id || '').toLowerCase() === normalizedId;
+                const arn = String(finding.resource_arn || '').toLowerCase();
+                const arnMatches = arn.endsWith(`/${normalizedId}`);
+                if (!sameId && !arnMatches) {
+                    return false;
+                }
+
+                if (region && finding.region && String(finding.region) !== String(region)) {
+                    return false;
+                }
+
+                if (accountId && finding.account_id && String(finding.account_id) !== String(accountId)) {
+                    return false;
+                }
+
+                return true;
+            }) || null;
+        }
+
+        function findEbsFindingByResource(resourceId, resourceType, region, accountId) {
+            const normalizedId = String(resourceId || '').trim().toLowerCase();
+            if (!normalizedId) {
+                return null;
+            }
+
+            return allFindings.find(finding => {
+                if (resourceType && finding.type !== resourceType) {
+                    return false;
+                }
+
+                const sameId = String(finding.id || '').toLowerCase() === normalizedId;
+                const arn = String(finding.resource_arn || '').toLowerCase();
+                const arnMatches = arn.endsWith(`/${normalizedId}`);
+                if (!sameId && !arnMatches) {
+                    return false;
+                }
+
+                if (region && finding.region && String(finding.region) !== String(region)) {
+                    return false;
+                }
+
+                if (accountId && finding.account_id && String(finding.account_id) !== String(accountId)) {
+                    return false;
+                }
+
+                return true;
+            }) || null;
+        }
+
+        function findS3FindingByBucketName(bucketName, workflow, region, accountId) {
+            const normalizedName = String(bucketName || '').trim().toLowerCase();
+            if (!normalizedName) {
+                return null;
+            }
+
+            return allFindings.find(finding => {
+                if (finding.type !== 'S3 Bucket') {
+                    return false;
+                }
+
+                if (String(finding.id || '').trim().toLowerCase() !== normalizedName) {
+                    return false;
+                }
+
+                const details = finding.details || {};
+                if (workflow && details.s3_workflow && details.s3_workflow !== workflow) {
+                    return false;
+                }
+
+                if (region && finding.region && String(finding.region) !== String(region)) {
+                    return false;
+                }
+
+                if (accountId && finding.account_id && String(finding.account_id) !== String(accountId)) {
+                    return false;
+                }
+
+                return true;
+            }) || null;
+        }
+
+        function getS3ActionButtonLabel(finding) {
+            const workflow = getSelectedS3Workflow(finding);
+            return `🪄 ${formatS3WorkflowLabel(workflow)}`;
+        }
+
+        function formatS3WorkflowLabel(workflow) {
+            return ({
+                lifecycle_transition: 'Transition To Cheaper Storage',
+                intelligent_tiering: 'Enable Intelligent Tier',
+                abort_incomplete_multipart: 'Delete Incomplete Multipart Upload'
+            })[workflow] || 'Set Lifecycle Policy';
+        }
+
+        function getSelectedS3Workflow(finding) {
+            const findingId = typeof finding === 'string' ? finding : finding?.id;
+            const details = typeof finding === 'string'
+                ? (allFindings.find(item => item.id === finding)?.details || {})
+                : (finding?.details || {});
+            return s3WorkflowSelections[findingId] || details.s3_workflow || 'lifecycle_transition';
+        }
+
+        function renderS3LifecycleButtons(finding, allowedActions) {
+            if (finding.type !== 'S3 Bucket' || (allowedActions && !allowedActions.includes('lifecycle'))) {
+                return '';
+            }
+
+            const workflows = [
+                'intelligent_tiering',
+                'abort_incomplete_multipart',
+                'lifecycle_transition'
+            ];
+
+            return workflows.map(workflow => {
+                const active = userActions[finding.id] === 'lifecycle' && getSelectedS3Workflow(finding) === workflow ? ' active' : '';
+                return `<button class="lifecycle${active}" onclick="markAction('${finding.id}', 'lifecycle', '${workflow}')">🪄 ${formatS3WorkflowLabel(workflow)}</button>`;
+            }).join('');
         }
 
         function isAutomationManaged(finding) {
@@ -926,11 +1263,15 @@
 
         function renderFindings() {
             const container = document.getElementById('findingsList');
+            const currentScheduleConfig = getScheduleConfig();
             const typeFilter = document.getElementById('typeFilter').value;
             const severityFilter = document.getElementById('severityFilter').value;
             const statusFilter = document.getElementById('statusFilter').value;
             const orphanOnly = document.getElementById('orphanOnlyFilter').checked;
             const searchTerm = document.getElementById('searchFilter').value.trim().toLowerCase();
+            const isEc2TypeSelected = typeFilter === 'EC2 Instance';
+            const isEbsTypeSelected = typeFilter === 'EBS Volume' || typeFilter === 'EBS Snapshot';
+            const isS3TypeSelected = typeFilter === 'S3 Bucket';
 
             let filtered = allFindings.filter(f => {
                 if (typeFilter && f.type !== typeFilter) return false;
@@ -949,22 +1290,104 @@
 
             document.getElementById('filterMeta').textContent = `Showing ${filtered.length} of ${allFindings.length} findings`;
 
+            if (!isEc2TypeSelected) {
+                ec2ActiveTab = 'recommendations';
+            }
+
+            if (!isEbsTypeSelected) {
+                ebsActiveTab = 'recommendations';
+            }
+
+            if (!isS3TypeSelected) {
+                s3ActiveTab = 'recommendations';
+            }
+
+            const ec2TabsSection = isEc2TypeSelected ? renderEc2TabsSection(filtered.length) : '';
+            const ebsTabsSection = isEbsTypeSelected ? renderEbsTabsSection(filtered.length) : '';
+            const s3TabsSection = isS3TypeSelected ? renderS3TabsSection(filtered.length) : '';
+            const showRecommendations = !isEc2TypeSelected || ec2ActiveTab === 'recommendations';
+            const showEbsRecommendations = !isEbsTypeSelected || ebsActiveTab === 'recommendations';
+            const showS3Recommendations = !isS3TypeSelected || s3ActiveTab === 'recommendations';
+
             if (filtered.length === 0) {
+                if (isEc2TypeSelected) {
+                    container.innerHTML = ec2TabsSection + (showRecommendations
+                        ? '<div class="loading"><p>No EC2 findings match your filters.</p></div>'
+                        : '');
+                    applyScheduleConfig(currentScheduleConfig);
+                    return;
+                }
+                if (isEbsTypeSelected) {
+                    container.innerHTML = ebsTabsSection + (showEbsRecommendations
+                        ? '<div class="loading"><p>No EBS findings match your filters.</p></div>'
+                        : '');
+                    applyScheduleConfig(currentScheduleConfig);
+                    return;
+                }
+                if (isS3TypeSelected) {
+                    container.innerHTML = s3TabsSection + (showS3Recommendations
+                        ? '<div class="loading"><p>No S3 findings match your filters.</p></div>'
+                        : '');
+                    applyScheduleConfig(currentScheduleConfig);
+                    return;
+                }
                 container.innerHTML = '<div class="loading"><p>No findings match your filters</p></div>';
                 return;
             }
 
-            container.innerHTML = filtered.map(finding => {
+            const findingsHtml = filtered.map(finding => {
                 const action = userActions[finding.id] || 'pending';
-                const className = action === 'keep' ? 'kept' : action === 'remove' ? 'marked-remove' : '';
+                const className = action === 'keep'
+                    ? 'kept'
+                    : action === 'remove'
+                        ? 'marked-remove'
+                        : action === 'lifecycle'
+                            ? 'marked-lifecycle'
+                            : '';
                 const automationManaged = isAutomationManaged(finding);
                 const orphaned = isLikelyOrphaned(finding);
+                const details = finding.details || {};
+                const isS3Finding = finding.type === 'S3 Bucket';
+                const allowedActions = Array.isArray(details.allowed_actions) ? details.allowed_actions : null;
                 const riskClass = orphaned ? 'safe' : 'caution';
                 const riskText = orphaned
                     ? 'Likely orphaned resource: safer candidate for removal.'
                     : automationManaged
                         ? 'Automation-managed resource detected: removal can cause drift. Prefer Notify.'
                         : 'Not clearly orphaned: review dependencies before removal.';
+                const recommendationDetail = details.recommended_instance_type
+                    ? `<div class="finding-detail"><label>Recommended Type</label><value>${details.recommended_instance_type}</value></div>`
+                    : '';
+                const stackDetail = details.stack_name
+                    ? `<div class="finding-detail"><label>Stack / Automation</label><value>${details.managed_by || 'cloudformation'}:${details.stack_name}</value></div>`
+                    : '';
+                const migrationDetail = details.migration_instructions
+                    ? `<div class="finding-detail"><label>Migration Guidance</label><value>${details.migration_instructions}</value></div>`
+                    : '';
+                const effectiveS3Workflow = isS3Finding ? getSelectedS3Workflow(finding) : '';
+                const s3WorkflowDetail = isS3Finding
+                    ? `<div class="finding-detail"><label>S3 Workflow</label><value>${formatS3WorkflowLabel(effectiveS3Workflow)}</value></div>`
+                    : '';
+                const ec2Buttons = finding.type === 'EC2 Instance'
+                    ? `<button class="schedule" onclick="markAction('${finding.id}', 'schedule')">🕒 SCHEDULE</button>
+                       <button class="resize" onclick="markAction('${finding.id}', 'resize')">📉 RIGHTSIZE</button>`
+                    : '';
+                const s3LifecycleButtons = renderS3LifecycleButtons(finding, allowedActions);
+                const s3RemoveButton = isS3Finding && (!allowedActions || allowedActions.includes('remove'))
+                    ? `<button class="remove" onclick="markAction('${finding.id}', 'remove')">✕ REMOVE</button>`
+                    : '';
+                const s3NotifyButton = isS3Finding && (!allowedActions || allowedActions.includes('notify'))
+                    ? `<button class="notify" onclick="markAction('${finding.id}', 'notify')">⚠ NOTIFY USERS</button>`
+                    : '';
+                const statusLabel = ({
+                    pending: '⏳ Pending',
+                    keep: '✓ Keep',
+                    remove: '✓ Remove',
+                    notify: '⚠ Notify',
+                    schedule: '🕒 Schedule',
+                    resize: '📉 Resize',
+                    lifecycle: `🪄 ${formatS3WorkflowLabel(effectiveS3Workflow)}`
+                })[action] || '⏳ Pending';
                 
                 return `
                     <div class="finding-item ${className}" id="finding-${finding.id}">
@@ -993,16 +1416,21 @@
                                 <label>Recommended Action</label>
                                 <value>${finding.action || 'Remove'}</value>
                             </div>
+                            ${recommendationDetail}
+                            ${s3WorkflowDetail}
+                            ${stackDetail}
+                            ${migrationDetail}
                         </div>
 
                         <div class="finding-actions">
                             <div class="action-buttons">
                                 <button class="keep" onclick="markAction('${finding.id}', 'keep')">✓ KEEP</button>
-                                <button class="remove" onclick="markAction('${finding.id}', 'remove')">✕ REMOVE</button>
+                                ${isS3Finding ? `${s3LifecycleButtons}${s3RemoveButton}${s3NotifyButton}` : `<button class="remove" onclick="markAction('${finding.id}', 'remove')">✕ REMOVE</button>
                                 <button class="notify" onclick="markAction('${finding.id}', 'notify')">⚠ NOTIFY USERS</button>
+                                ${ec2Buttons}`}
                             </div>
                             <div class="action-status ${action}" id="status-${finding.id}">
-                                ${action === 'pending' ? '⏳ Pending' : action === 'keep' ? '✓ Keep' : action === 'remove' ? '✓ Remove' : '⚠ Notify'}
+                                ${statusLabel}
                             </div>
                         </div>
                         <div class="risk-note ${riskClass}">${riskText}</div>
@@ -1010,15 +1438,188 @@
                 `;
             }).join('');
 
+            const prefixedSections = isEc2TypeSelected
+                ? ec2TabsSection
+                : (isEbsTypeSelected ? ebsTabsSection : (isS3TypeSelected ? s3TabsSection : ''));
+            const shouldShowFindings = isEc2TypeSelected
+                ? showRecommendations
+                : (isEbsTypeSelected ? showEbsRecommendations : (isS3TypeSelected ? showS3Recommendations : true));
+
+            container.innerHTML = prefixedSections + (shouldShowFindings ? findingsHtml : '');
+
+            applyScheduleConfig(currentScheduleConfig);
+
             updateActionCounter();
             updateTotalSavings();
         }
 
-        function markAction(findingId, action) {
+        function renderEbsTabsSection(ebsCount) {
+            const recommendationsActive = ebsActiveTab === 'recommendations';
+            const customActive = ebsActiveTab === 'custom';
+
+            return `
+                <div class="finding-item" id="ebsTabsSection">
+                    <div class="finding-header">
+                        <div>
+                            <span class="finding-title">EBS</span>
+                            <span class="finding-type">Filtered View</span>
+                        </div>
+                    </div>
+                    <div class="ebs-tabs">
+                        <button type="button" class="ebs-tab-btn ${recommendationsActive ? 'active' : ''}" onclick="setEbsTab('recommendations')">Recommendations (${ebsCount})</button>
+                        <button type="button" class="ebs-tab-btn ${customActive ? 'active' : ''}" onclick="setEbsTab('custom')">Custom</button>
+                    </div>
+                    ${recommendationsActive
+                        ? '<div class="ebs-tab-note">Recommendations tab lists EBS findings below.</div>'
+                        : renderEbsCustomSection()}
+                </div>
+            `;
+        }
+
+        function setEbsTab(tabName) {
+            if (tabName !== 'recommendations' && tabName !== 'custom') {
+                return;
+            }
+            ebsActiveTab = tabName;
+            renderFindings();
+        }
+
+        function renderS3TabsSection(s3Count) {
+            const recommendationsActive = s3ActiveTab === 'recommendations';
+            const customActive = s3ActiveTab === 'custom';
+
+            return `
+                <div class="finding-item" id="s3TabsSection">
+                    <div class="finding-header">
+                        <div>
+                            <span class="finding-title">S3</span>
+                            <span class="finding-type">Filtered View</span>
+                        </div>
+                    </div>
+                    <div class="s3-tabs">
+                        <button type="button" class="s3-tab-btn ${recommendationsActive ? 'active' : ''}" onclick="setS3Tab('recommendations')">Recommendations (${s3Count})</button>
+                        <button type="button" class="s3-tab-btn ${customActive ? 'active' : ''}" onclick="setS3Tab('custom')">Custom</button>
+                    </div>
+                    ${recommendationsActive
+                        ? '<div class="s3-tab-note">Recommendations tab lists S3 findings below.</div>'
+                        : renderS3CustomSection()}
+                </div>
+            `;
+        }
+
+        function setS3Tab(tabName) {
+            if (tabName !== 'recommendations' && tabName !== 'custom') {
+                return;
+            }
+            s3ActiveTab = tabName;
+            renderFindings();
+        }
+
+        function renderS3CustomSection() {
+            return `
+                <div class="schedule-config">
+                    <label>Custom S3 lifecycle and tiering entries</label>
+                    <div class="manual-targets">
+                        <div class="manual-target-row">
+                            <select id="manualS3Workflow">
+                                <option value="intelligent_tiering">Enable Intelligent Tier</option>
+                                <option value="abort_incomplete_multipart">Delete Incomplete Multipart Upload</option>
+                                <option value="lifecycle_transition">Transition To Cheaper Storage</option>
+                            </select>
+                            <input id="manualS3BucketName" type="text" placeholder="Bucket name" />
+                            <input id="manualS3Region" type="text" placeholder="Region" value="us-east-1" />
+                            <input id="manualS3Account" type="text" placeholder="Account ID" />
+                            <button type="button" class="secondary" onclick="addManualS3Target()">+ Add</button>
+                        </div>
+                        <div class="manual-target-list" id="manualS3TargetList"></div>
+                        <div class="custom-savings-summary" id="s3CustomSavingsSummary"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderEbsCustomSection() {
+            const selectedType = document.getElementById('typeFilter')?.value === 'EBS Snapshot' ? 'EBS Snapshot' : 'EBS Volume';
+
+            return `
+                <div class="schedule-config">
+                    <label>Custom EBS entries for remove workflow</label>
+                    <div class="manual-targets">
+                        <div class="manual-target-row">
+                            <select id="manualEbsResourceType">
+                                <option value="EBS Volume" ${selectedType === 'EBS Volume' ? 'selected' : ''}>EBS Volume</option>
+                                <option value="EBS Snapshot" ${selectedType === 'EBS Snapshot' ? 'selected' : ''}>EBS Snapshot</option>
+                            </select>
+                            <input id="manualEbsResourceId" type="text" placeholder="Resource ID (e.g., vol-0123... or snap-0123...)" />
+                            <input id="manualEbsRegion" type="text" placeholder="Region" value="us-east-1" />
+                            <input id="manualEbsAccount" type="text" placeholder="Account ID" />
+                            <button type="button" class="secondary" onclick="addManualEbsTarget()">+ Add</button>
+                        </div>
+                        <div class="manual-target-list" id="manualEbsTargetList"></div>
+                        <div class="custom-savings-summary" id="ebsCustomSavingsSummary"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderEc2TabsSection(ec2Count) {
+            const recommendationsActive = ec2ActiveTab === 'recommendations';
+            const customActive = ec2ActiveTab === 'custom';
+
+            return `
+                <div class="finding-item" id="ec2TabsSection">
+                    <div class="finding-header">
+                        <div>
+                            <span class="finding-title">EC2</span>
+                            <span class="finding-type">Filtered View</span>
+                        </div>
+                    </div>
+                    <div class="ec2-tabs">
+                        <button type="button" class="ec2-tab-btn ${recommendationsActive ? 'active' : ''}" onclick="setEc2Tab('recommendations')">Recommendations (${ec2Count})</button>
+                        <button type="button" class="ec2-tab-btn ${customActive ? 'active' : ''}" onclick="setEc2Tab('custom')">Custom</button>
+                    </div>
+                    ${recommendationsActive
+                        ? '<div class="ec2-tab-note">Recommendations tab lists EC2 findings below.</div>'
+                        : renderEc2ScheduleSection()}
+                </div>
+            `;
+        }
+
+        function setEc2Tab(tabName) {
+            if (tabName !== 'recommendations' && tabName !== 'custom') {
+                return;
+            }
+            ec2ActiveTab = tabName;
+            renderFindings();
+        }
+
+        function renderEc2ScheduleSection() {
+            return `
+                <div class="schedule-config">
+                    <label><input id="scheduleEnabled" type="checkbox" checked> EC2 Schedule Enabled</label>
+                    <label>Timezone <input id="scheduleTimezone" type="text" value="UTC" placeholder="UTC" /></label>
+                    <label>Business Start <input id="scheduleStart" type="time" value="08:00" /></label>
+                    <label>Business End <input id="scheduleEnd" type="time" value="18:00" /></label>
+                    <label><input id="weekendOff" type="checkbox" checked> Weekend Off</label>
+                    <div class="manual-targets">
+                        <div class="manual-target-row">
+                            <input id="manualInstanceId" type="text" placeholder="Instance ID (e.g., i-0123...)" />
+                            <input id="manualRegion" type="text" placeholder="Region" value="us-east-1" />
+                            <input id="manualAccount" type="text" placeholder="Account ID" />
+                            <button type="button" class="secondary" onclick="addManualScheduleTarget()">+ Add</button>
+                        </div>
+                        <div class="manual-target-list" id="manualTargetList"></div>
+                        <div class="custom-savings-summary" id="customSavingsSummary"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function markAction(findingId, action, workflowOverride = '') {
             const finding = allFindings.find(f => f.id === findingId);
 
             if (action === 'remove' && finding && !isLikelyOrphaned(finding)) {
-                const proceed = window.confirm(
+                const proceed = await showRemoveWarningDialog(
                     'This resource is not clearly orphaned and may be automation-managed. Removing it can cause CloudFormation/Terraform drift. Continue?'
                 );
                 if (!proceed) {
@@ -1026,8 +1627,366 @@
                 }
             }
 
+            if (action === 'lifecycle' && finding?.type === 'S3 Bucket') {
+                s3WorkflowSelections[findingId] = workflowOverride || getSelectedS3Workflow(finding);
+            }
+
             userActions[findingId] = action;
             renderFindings();
+        }
+
+        function showRemoveWarningDialog(message) {
+            const modal = document.getElementById('removeWarningModal');
+            const messageEl = document.getElementById('removeWarningMessage');
+            const cancelBtn = document.getElementById('removeWarningCancel');
+            const confirmBtn = document.getElementById('removeWarningConfirm');
+
+            if (!modal || !messageEl || !cancelBtn || !confirmBtn) {
+                return Promise.resolve(window.confirm(message));
+            }
+
+            messageEl.textContent = message;
+
+            return new Promise(resolve => {
+                const cleanup = (result) => {
+                    modal.classList.remove('active');
+                    cancelBtn.removeEventListener('click', onCancel);
+                    confirmBtn.removeEventListener('click', onConfirm);
+                    modal.removeEventListener('click', onBackdropClick);
+                    document.removeEventListener('keydown', onKeyDown);
+                    resolve(result);
+                };
+
+                const onCancel = () => cleanup(false);
+                const onConfirm = () => cleanup(true);
+                const onBackdropClick = (event) => {
+                    if (event.target === modal) {
+                        cleanup(false);
+                    }
+                };
+                const onKeyDown = (event) => {
+                    if (event.key === 'Escape') {
+                        cleanup(false);
+                    }
+                };
+
+                cancelBtn.addEventListener('click', onCancel);
+                confirmBtn.addEventListener('click', onConfirm);
+                modal.addEventListener('click', onBackdropClick);
+                document.addEventListener('keydown', onKeyDown);
+                modal.classList.add('active');
+                cancelBtn.focus();
+            });
+        }
+
+        function getScheduleConfig() {
+            const enabledEl = document.getElementById('scheduleEnabled');
+            if (!enabledEl) {
+                return {
+                    ...scheduleConfigCache,
+                    manual_targets: manualScheduleTargets,
+                    ebs_manual_targets: manualEbsTargets,
+                    s3_manual_targets: manualS3Targets
+                };
+            }
+
+            const config = {
+                enabled: enabledEl.checked,
+                timezone: document.getElementById('scheduleTimezone').value.trim() || 'UTC',
+                business_start: document.getElementById('scheduleStart').value || '08:00',
+                business_end: document.getElementById('scheduleEnd').value || '18:00',
+                off_days: document.getElementById('weekendOff').checked ? [5, 6] : [],
+                manual_targets: manualScheduleTargets,
+                ebs_manual_targets: manualEbsTargets,
+                s3_manual_targets: manualS3Targets
+            };
+
+            scheduleConfigCache = { ...config };
+            return config;
+        }
+
+        function applyScheduleConfig(config) {
+            if (!config) return;
+            const normalized = {
+                enabled: config.enabled !== false,
+                timezone: config.timezone || 'UTC',
+                business_start: config.business_start || '08:00',
+                business_end: config.business_end || '18:00',
+                off_days: Array.isArray(config.off_days) ? config.off_days : [5, 6]
+            };
+
+            manualScheduleTargets = Array.isArray(config.manual_targets) ? config.manual_targets : [];
+            manualEbsTargets = Array.isArray(config.ebs_manual_targets) ? config.ebs_manual_targets : [];
+            manualS3Targets = Array.isArray(config.s3_manual_targets) ? config.s3_manual_targets : [];
+            scheduleConfigCache = {
+                ...normalized,
+                manual_targets: manualScheduleTargets,
+                ebs_manual_targets: manualEbsTargets,
+                s3_manual_targets: manualS3Targets
+            };
+
+            const enabledEl = document.getElementById('scheduleEnabled');
+            if (!enabledEl) {
+                return;
+            }
+
+            enabledEl.checked = normalized.enabled;
+            document.getElementById('scheduleTimezone').value = normalized.timezone;
+            document.getElementById('scheduleStart').value = normalized.business_start;
+            document.getElementById('scheduleEnd').value = normalized.business_end;
+            document.getElementById('weekendOff').checked = normalized.off_days.includes(5) && normalized.off_days.includes(6);
+            renderManualScheduleTargets();
+            renderManualEbsTargets();
+            renderManualS3Targets();
+        }
+
+        function renderManualScheduleTargets() {
+            const list = document.getElementById('manualTargetList');
+            const summary = document.getElementById('customSavingsSummary');
+            if (!list) {
+                return;
+            }
+            if (!manualScheduleTargets.length) {
+                list.innerHTML = '<span>No manual scheduler targets added.</span>';
+                if (summary) {
+                    summary.textContent = 'Potential savings for custom targets: $0.00/month ($0.00/year).';
+                }
+                return;
+            }
+
+            let totalMonthly = 0;
+            let totalAnnual = 0;
+
+            list.innerHTML = manualScheduleTargets
+                .map((target, idx) => {
+                    const matched = findEc2FindingByInstanceId(target.instance_id, target.region, target.account_id);
+                    const monthly = matched ? getMonthlySavings(matched) : 0;
+                    const annual = matched ? getAnnualSavings(matched) : 0;
+
+                    target.estimated_monthly_savings = monthly;
+                    target.estimated_annual_savings = annual;
+
+                    totalMonthly += monthly;
+                    totalAnnual += annual;
+
+                    const savingsLabel = matched
+                        ? `est: $${monthly.toFixed(2)}/mo, $${annual.toFixed(2)}/yr`
+                        : 'est: no matching EC2 finding';
+
+                    return `<span class="manual-target-chip">${target.instance_id} @ ${target.region} (${target.account_id || 'current-account'}) - ${savingsLabel} <button type="button" onclick="removeManualScheduleTarget(${idx})">x</button></span>`;
+                })
+                .join('');
+
+            if (summary) {
+                summary.textContent = `Potential savings for custom targets: $${totalMonthly.toFixed(2)}/month ($${totalAnnual.toFixed(2)}/year).`;
+            }
+        }
+
+        function addManualScheduleTarget() {
+            const instanceInput = document.getElementById('manualInstanceId');
+            const regionInput = document.getElementById('manualRegion');
+            const accountInput = document.getElementById('manualAccount');
+
+            if (!instanceInput || !regionInput || !accountInput) {
+                return;
+            }
+
+            const instanceId = instanceInput.value.trim();
+            const region = regionInput.value.trim();
+            const accountId = accountInput.value.trim();
+
+            if (!instanceId || !region) {
+                showError('Instance ID and region are required for manual scheduler targets.');
+                return;
+            }
+
+            manualScheduleTargets.push({
+                instance_id: instanceId,
+                region,
+                account_id: accountId,
+            });
+
+            instanceInput.value = '';
+            accountInput.value = '';
+            renderManualScheduleTargets();
+        }
+
+        function removeManualScheduleTarget(index) {
+            manualScheduleTargets.splice(index, 1);
+            renderManualScheduleTargets();
+        }
+
+        function renderManualEbsTargets() {
+            const list = document.getElementById('manualEbsTargetList');
+            const summary = document.getElementById('ebsCustomSavingsSummary');
+            if (!list) {
+                return;
+            }
+
+            if (!manualEbsTargets.length) {
+                list.innerHTML = '<span>No custom EBS entries added.</span>';
+                if (summary) {
+                    summary.textContent = 'Potential savings for custom EBS entries: $0.00/month ($0.00/year).';
+                }
+                return;
+            }
+
+            let totalMonthly = 0;
+            let totalAnnual = 0;
+
+            list.innerHTML = manualEbsTargets
+                .map((target, idx) => {
+                    const resourceId = target.resource_id || target.volume_id || '';
+                    const resourceType = target.resource_type || target.type || 'EBS Volume';
+                    const matched = findEbsFindingByResource(resourceId, resourceType, target.region, target.account_id);
+                    const monthly = matched ? getMonthlySavings(matched) : 0;
+                    const annual = matched ? getAnnualSavings(matched) : 0;
+
+                    target.resource_id = resourceId;
+                    target.resource_type = resourceType;
+                    target.estimated_monthly_savings = monthly;
+                    target.estimated_annual_savings = annual;
+
+                    totalMonthly += monthly;
+                    totalAnnual += annual;
+
+                    const savingsLabel = matched
+                        ? `est: $${monthly.toFixed(2)}/mo, $${annual.toFixed(2)}/yr`
+                        : 'est: no matching EBS finding';
+
+                    return `<span class="manual-target-chip">${resourceType}: ${resourceId} @ ${target.region} (${target.account_id || 'current-account'}) - ${savingsLabel} <button type="button" onclick="removeManualEbsTarget(${idx})">x</button></span>`;
+                })
+                .join('');
+
+            if (summary) {
+                summary.textContent = `Potential savings for custom EBS entries: $${totalMonthly.toFixed(2)}/month ($${totalAnnual.toFixed(2)}/year).`;
+            }
+        }
+
+        function addManualEbsTarget() {
+            const resourceTypeInput = document.getElementById('manualEbsResourceType');
+            const resourceInput = document.getElementById('manualEbsResourceId');
+            const regionInput = document.getElementById('manualEbsRegion');
+            const accountInput = document.getElementById('manualEbsAccount');
+
+            if (!resourceTypeInput || !resourceInput || !regionInput || !accountInput) {
+                return;
+            }
+
+            const resourceType = resourceTypeInput.value;
+            const resourceId = resourceInput.value.trim();
+            const region = regionInput.value.trim();
+            const accountId = accountInput.value.trim();
+
+            if (!resourceId || !region) {
+                showError('EBS resource ID and region are required for custom EBS entries.');
+                return;
+            }
+
+            manualEbsTargets.push({
+                resource_id: resourceId,
+                resource_type: resourceType,
+                region,
+                account_id: accountId,
+                user_action: 'remove',
+                type: resourceType
+            });
+
+            resourceInput.value = '';
+            accountInput.value = '';
+            renderManualEbsTargets();
+        }
+
+        function removeManualEbsTarget(index) {
+            manualEbsTargets.splice(index, 1);
+            renderManualEbsTargets();
+        }
+
+        function renderManualS3Targets() {
+            const list = document.getElementById('manualS3TargetList');
+            const summary = document.getElementById('s3CustomSavingsSummary');
+            if (!list) {
+                return;
+            }
+
+            if (!manualS3Targets.length) {
+                list.innerHTML = '<span>No custom S3 entries added.</span>';
+                if (summary) {
+                    summary.textContent = 'Potential savings for custom S3 entries: $0.00/month ($0.00/year).';
+                }
+                return;
+            }
+
+            let totalMonthly = 0;
+            let totalAnnual = 0;
+
+            list.innerHTML = manualS3Targets
+                .map((target, index) => {
+                    const bucketName = target.bucket_name || target.resource_id || '';
+                    const workflow = target.s3_workflow || target.workflow || 'lifecycle_transition';
+                    const matched = findS3FindingByBucketName(bucketName, workflow, target.region, target.account_id)
+                        || findS3FindingByBucketName(bucketName, '', target.region, target.account_id);
+                    const monthly = matched ? getMonthlySavings(matched) : 0;
+                    const annual = matched ? getAnnualSavings(matched) : 0;
+
+                    target.bucket_name = bucketName;
+                    target.s3_workflow = workflow;
+                    target.estimated_monthly_savings = monthly;
+                    target.estimated_annual_savings = annual;
+
+                    totalMonthly += monthly;
+                    totalAnnual += annual;
+
+                    const savingsLabel = matched
+                        ? `est: $${monthly.toFixed(2)}/mo, $${annual.toFixed(2)}/yr`
+                        : 'est: no matching S3 finding';
+
+                    return `<span class="manual-target-chip">${bucketName} - ${formatS3WorkflowLabel(workflow)} @ ${target.region} (${target.account_id || 'current-account'}) - ${savingsLabel} <button type="button" onclick="removeManualS3Target(${index})">x</button></span>`;
+                })
+                .join('');
+
+            if (summary) {
+                summary.textContent = `Potential savings for custom S3 entries: $${totalMonthly.toFixed(2)}/month ($${totalAnnual.toFixed(2)}/year).`;
+            }
+        }
+
+        function addManualS3Target() {
+            const workflowInput = document.getElementById('manualS3Workflow');
+            const bucketInput = document.getElementById('manualS3BucketName');
+            const regionInput = document.getElementById('manualS3Region');
+            const accountInput = document.getElementById('manualS3Account');
+
+            if (!workflowInput || !bucketInput || !regionInput || !accountInput) {
+                return;
+            }
+
+            const workflow = workflowInput.value;
+            const bucketName = bucketInput.value.trim();
+            const region = regionInput.value.trim();
+            const accountId = accountInput.value.trim();
+
+            if (!bucketName || !region) {
+                showError('Bucket name and region are required for custom S3 entries.');
+                return;
+            }
+
+            manualS3Targets.push({
+                bucket_name: bucketName,
+                region,
+                account_id: accountId,
+                user_action: 'lifecycle',
+                s3_workflow: workflow,
+                type: 'S3 Bucket'
+            });
+
+            bucketInput.value = '';
+            accountInput.value = '';
+            renderManualS3Targets();
+        }
+
+        function removeManualS3Target(index) {
+            manualS3Targets.splice(index, 1);
+            renderManualS3Targets();
         }
 
         function updateActionCounter() {
@@ -1038,7 +1997,7 @@
 
         function updateTotalSavings() {
             const savings = Object.keys(userActions)
-                .filter(id => userActions[id] === 'remove')
+                .filter(id => ['remove', 'schedule', 'resize', 'lifecycle'].includes(userActions[id]))
                 .reduce((sum, id) => {
                     const finding = allFindings.find(f => f.id === id);
                     return sum + getAnnualSavings(finding);
@@ -1058,10 +2017,57 @@
 
         async function saveActions() {
             const notifyCount = Object.values(userActions).filter(action => action === 'notify').length;
+            const lifecycleCount = Object.values(userActions).filter(action => action === 'lifecycle').length;
+            const scheduleConfig = getScheduleConfig();
+            const actionItems = allFindings
+                .filter(f => userActions[f.id])
+                .map(f => {
+                    const details = { ...(f.details || {}) };
+                    if (f.type === 'S3 Bucket' && userActions[f.id] === 'lifecycle') {
+                        details.s3_workflow = getSelectedS3Workflow(f);
+                    }
+
+                    return {
+                        id: f.id,
+                        type: f.type,
+                        issue: f.issue,
+                        region: f.region,
+                        account_id: f.account_id,
+                        user_action: userActions[f.id],
+                        details,
+                        tags: f.tags || {}
+                    };
+                });
 
             if (CONFIG.SMOKE_MODE) {
                 localStorage.setItem(LOCAL_ACTIONS_KEY, JSON.stringify(userActions));
-                showSuccess(`Actions saved locally for smoke testing. Notify actions: ${notifyCount}.`);
+                localStorage.setItem(LOCAL_SCHEDULE_KEY, JSON.stringify(scheduleConfig));
+                localStorage.setItem(LOCAL_S3_WORKFLOW_KEY, JSON.stringify(s3WorkflowSelections));
+                showSuccess(`Actions saved locally for smoke testing. Notify actions: ${notifyCount}. Lifecycle actions: ${lifecycleCount}.`);
+                return;
+            }
+
+            const saveResponse = await fetch(`${CONFIG.AUTH_API_URL}/actions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    schedule_config: scheduleConfig,
+                    items: actionItems
+                })
+            });
+
+            if (!saveResponse.ok) {
+                let errorMessage = 'Failed to save actions';
+                try {
+                    const err = await saveResponse.json();
+                    errorMessage = err.error || errorMessage;
+                } catch (_) {
+                    // keep default
+                }
+                showError(errorMessage);
                 return;
             }
 
@@ -1103,7 +2109,7 @@
 
             // In real implementation, this would upload to S3
             console.log('Saving actions:', userActions);
-            showSuccess(`Actions saved! Scheduler will execute marked removals. Notify actions: ${notifyCount}.`);
+            showSuccess(`Actions saved! Scheduler will execute supported removals and S3 lifecycle actions. Notify actions: ${notifyCount}. Lifecycle actions: ${lifecycleCount}.`);
         }
 
         function exportCSV() {
@@ -1134,6 +2140,16 @@
                     if (saved) {
                         userActions = JSON.parse(saved) || {};
                     }
+
+                    const savedWorkflows = localStorage.getItem(LOCAL_S3_WORKFLOW_KEY);
+                    if (savedWorkflows) {
+                        s3WorkflowSelections = JSON.parse(savedWorkflows) || {};
+                    }
+
+                    const savedSchedule = localStorage.getItem(LOCAL_SCHEDULE_KEY);
+                    if (savedSchedule) {
+                        applyScheduleConfig(JSON.parse(savedSchedule));
+                    }
                 } catch (error) {
                     console.warn('Failed to parse saved local actions:', error);
                     userActions = {};
@@ -1144,8 +2160,10 @@
                 return;
             }
 
-            // Load from S3 actions.json
-            fetch(`https://s3.amazonaws.com/${reportsBucket}/actions/actions.json`)
+            fetch(`${CONFIG.AUTH_API_URL}/actions`, {
+                method: 'GET',
+                credentials: 'include'
+            })
                 .then(r => {
                     if (!r.ok) {
                         throw new Error(`HTTP ${r.status} while loading actions`);
@@ -1153,11 +2171,18 @@
                     return r.json();
                 })
                 .then(data => {
+                    applyScheduleConfig(data.schedule_config || {});
                     data.items?.forEach(item => {
-                        userActions[item.id] = item.user_action;
+                        if (item.id && item.user_action) {
+                            userActions[item.id] = item.user_action;
+                            if (item.type === 'S3 Bucket' && item.user_action === 'lifecycle' && item.details?.s3_workflow) {
+                                s3WorkflowSelections[item.id] = item.details.s3_workflow;
+                            }
+                        }
                     });
                     updateActionCounter();
                     updateTotalSavings();
+                    renderFindings();
                 })
                 .catch(() => {
                     // First time, no actions yet

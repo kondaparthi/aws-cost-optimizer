@@ -12,6 +12,8 @@ from .base_analyzer import BaseAnalyzer, AnalyzerResult, Finding
 
 # Issue #1: 95th-percentile spike ceiling for idle classification
 _IDLE_P95_CPU_CEILING = 8.0  # percent
+_SCHEDULE_OFF_HOURS_CPU_MAX = 5.0  # percent
+_SCHEDULE_OFF_HOURS_CPU_AVG = 2.0  # percent
 
 
 class EC2Analyzer(BaseAnalyzer):
@@ -171,6 +173,8 @@ class EC2Analyzer(BaseAnalyzer):
                                 for dp in p95_datapoints
                             )
 
+                            off_hours_metrics = self._off_hours_metrics(avg_datapoints)
+
                             # Issue #1: Both conditions must hold to flag idle.
                             # avg < threshold guards against sustained low use,
                             # p95 < ceiling guards against sporadic spikes being
@@ -214,6 +218,116 @@ class EC2Analyzer(BaseAnalyzer):
                                         "monthly_cost": monthly_cost
                                     }
                                 )
+                                continue
+
+                            # Instance is active in business hours but mostly idle off-hours/weekends.
+                            # Recommend schedule policy when off-hours usage is consistently low.
+                            if (
+                                off_hours_metrics["samples"] >= 24
+                                and off_hours_metrics["max_cpu"] <= _SCHEDULE_OFF_HOURS_CPU_MAX
+                                and off_hours_metrics["avg_cpu"] <= _SCHEDULE_OFF_HOURS_CPU_AVG
+                            ):
+                                monthly_cost = self._get_instance_cost(instance_type)
+                                schedule_savings = monthly_cost * 0.45  # Typical off-hours savings estimate
+                                finding = Finding(
+                                    resource_id=instance_id,
+                                    resource_type="EC2 Instance",
+                                    account_id=self.account_id,
+                                    region=self.region,
+                                    issue=(
+                                        "Low off-hours/weekend usage detected - "
+                                        f"off-hours avg CPU {off_hours_metrics['avg_cpu']:.1f}%, "
+                                        f"max {off_hours_metrics['max_cpu']:.1f}%"
+                                    ),
+                                    recommendation=(
+                                        "Set a business-hours schedule from UI. "
+                                        "Instance can be stopped off-hours/weekends and started during business hours."
+                                    ),
+                                    severity="high",
+                                    current_monthly_cost=monthly_cost,
+                                    potential_savings_monthly=schedule_savings,
+                                    potential_savings_annual=schedule_savings * 12,
+                                    resource_tags=tags,
+                                    details={
+                                        "instance_type": instance_type,
+                                        "recommended_action": "schedule",
+                                        "off_hours_avg_cpu": round(off_hours_metrics["avg_cpu"], 2),
+                                        "off_hours_max_cpu": round(off_hours_metrics["max_cpu"], 2),
+                                        "off_hours_samples": off_hours_metrics["samples"],
+                                        "business_start": "08:00",
+                                        "business_end": "18:00",
+                                        "off_days": [5, 6],
+                                        "timezone": "UTC",
+                                    },
+                                )
+                                result.add_finding(finding)
+                                self.logger.log_event(
+                                    "ec2_schedule_recommendation",
+                                    {
+                                        "instance_id": instance_id,
+                                        "off_hours_avg_cpu": off_hours_metrics["avg_cpu"],
+                                        "off_hours_max_cpu": off_hours_metrics["max_cpu"],
+                                        "monthly_savings": schedule_savings,
+                                    }
+                                )
+
+                            # Underutilized but not strictly idle: right-size recommendation.
+                            if avg_cpu < 25 and p95_cpu < 45:
+                                recommended_type = self._recommend_downsize(instance_type)
+                                if recommended_type and recommended_type != instance_type:
+                                    current_monthly = self._get_instance_cost(instance_type)
+                                    recommended_monthly = self._get_instance_cost(recommended_type)
+                                    savings_monthly = max(0.0, current_monthly - recommended_monthly)
+
+                                    stack_ctx = self._stack_context(tags)
+                                    recommendation = (
+                                        f"Right-size from {instance_type} to {recommended_type}. "
+                                        f"Estimated savings: ${savings_monthly:.2f}/month."
+                                    )
+                                    if stack_ctx["stack_name"]:
+                                        recommendation += (
+                                            f" Update stack '{stack_ctx['stack_name']}' to avoid drift."
+                                        )
+                                    else:
+                                        recommendation += " Use migration steps in details before change."
+
+                                    finding = Finding(
+                                        resource_id=instance_id,
+                                        resource_type="EC2 Instance",
+                                        account_id=self.account_id,
+                                        region=self.region,
+                                        issue=(
+                                            f"Underutilized instance - Average CPU {avg_cpu:.1f}% "
+                                            f"(p95: {p95_cpu:.1f}%) over {idle_days} days"
+                                        ),
+                                        recommendation=recommendation,
+                                        severity="medium",
+                                        current_monthly_cost=current_monthly,
+                                        potential_savings_monthly=savings_monthly,
+                                        potential_savings_annual=savings_monthly * 12,
+                                        resource_tags=tags,
+                                        details={
+                                            "instance_type": instance_type,
+                                            "recommended_instance_type": recommended_type,
+                                            "average_cpu": round(avg_cpu, 2),
+                                            "p95_cpu": round(p95_cpu, 2),
+                                            "idle_days": idle_days,
+                                            "managed_by": stack_ctx["managed_by"],
+                                            "stack_name": stack_ctx["stack_name"],
+                                            "migration_instructions": stack_ctx["migration_instructions"],
+                                        },
+                                    )
+                                    result.add_finding(finding)
+                                    self.logger.log_event(
+                                        "ec2_rightsize_recommendation",
+                                        {
+                                            "instance_id": instance_id,
+                                            "current_type": instance_type,
+                                            "recommended_type": recommended_type,
+                                            "monthly_savings": savings_monthly,
+                                            "stack_name": stack_ctx["stack_name"],
+                                        }
+                                    )
                     
                     except Exception as metric_error:
                         self.logger.log_event(
@@ -307,3 +421,82 @@ class EC2Analyzer(BaseAnalyzer):
         hourly_rate = hourly_rates.get(instance_type, 0.1)  # Default estimate
         monthly_hours = 730  # Average hours per month
         return hourly_rate * monthly_hours
+
+    def _recommend_downsize(self, instance_type: str) -> str:
+        """Recommend one size down within common EC2 families."""
+        downsizing_map = {
+            "t3.xlarge": "t3.large",
+            "t3.large": "t3.medium",
+            "t3.medium": "t3.small",
+            "t3.small": "t3.micro",
+            "m5.4xlarge": "m5.2xlarge",
+            "m5.2xlarge": "m5.xlarge",
+            "m5.xlarge": "m5.large",
+            "c5.4xlarge": "c5.2xlarge",
+            "c5.2xlarge": "c5.xlarge",
+            "c5.xlarge": "c5.large",
+            "r5.4xlarge": "r5.2xlarge",
+            "r5.2xlarge": "r5.xlarge",
+            "r5.xlarge": "r5.large",
+        }
+        return downsizing_map.get(instance_type, instance_type)
+
+    def _stack_context(self, tags: Dict[str, str]) -> Dict[str, str]:
+        """Extract automation ownership and migration guidance from tags."""
+        stack_name = tags.get("aws:cloudformation:stack-name")
+        if stack_name:
+            return {
+                "managed_by": "cloudformation",
+                "stack_name": stack_name,
+                "migration_instructions": (
+                    f"Update EC2 instance type in CloudFormation stack '{stack_name}', "
+                    "deploy change set, then verify replacement/update policy."
+                ),
+            }
+
+        managed_by = (tags.get("managed-by") or tags.get("ManagedBy") or "manual").lower()
+        if "terraform" in managed_by:
+            return {
+                "managed_by": "terraform",
+                "stack_name": tags.get("terraform:workspace") or "terraform-workspace",
+                "migration_instructions": (
+                    "Update instance_type in Terraform code, run terraform plan, "
+                    "review impact, then apply during a maintenance window."
+                ),
+            }
+
+        return {
+            "managed_by": "manual",
+            "stack_name": "",
+            "migration_instructions": (
+                "Create AMI/snapshot backup, stop instance, change instance type, "
+                "start instance, validate app health and rollback plan."
+            ),
+        }
+
+    def _off_hours_metrics(self, datapoints: List[Dict[str, Any]]) -> Dict[str, float]:
+        """Compute CPU usage stats outside business hours (08:00-18:00 weekdays)."""
+        off_hours_values: List[float] = []
+
+        for dp in datapoints:
+            ts = dp.get("Timestamp")
+            avg = dp.get("Average")
+            if ts is None or avg is None:
+                continue
+
+            hour_min = ts.strftime("%H:%M")
+            weekday = ts.weekday()
+            is_weekend = weekday in (5, 6)
+            in_business_window = (weekday < 5) and ("08:00" <= hour_min < "18:00")
+
+            if is_weekend or not in_business_window:
+                off_hours_values.append(float(avg))
+
+        if not off_hours_values:
+            return {"samples": 0, "avg_cpu": 0.0, "max_cpu": 0.0}
+
+        return {
+            "samples": len(off_hours_values),
+            "avg_cpu": sum(off_hours_values) / len(off_hours_values),
+            "max_cpu": max(off_hours_values),
+        }

@@ -34,11 +34,11 @@ A **CloudFormation-deployed, fully automated AWS cost optimization system** that
 - **How it's fixed**: Dashboard shows cost & CPU data, user approves stop
 - **Result**: $3K-10K/month typical savings
 
-### Problem 3: Incomplete S3 Multipart Uploads
-- **Cost**: $1-20/month per bucket with orphaned uploads
-- **How it's found**: Scans S3, finds incomplete uploads older than 7 days
-- **How it's fixed**: Dashboard shows details, user approves cleanup
-- **Result**: $500-2K/month typical savings
+### Problem 3: S3 Storage Waste
+- **Cost**: $1-200+/month per bucket across stale multipart uploads, missing lifecycle rules, and cold data left in Standard storage
+- **How it's found**: Scans S3 for incomplete multipart uploads, missing lifecycle transitions, missing Intelligent-Tiering, and buckets inactive for more than 3 years
+- **How it's fixed**: Dashboard shows S3 recommendations with `Notify`, `Set Lifecycle Policy`, and `Remove` only for safe-delete candidates
+- **Result**: $500-2K/month typical savings from multipart cleanup plus larger savings from lifecycle and tiering changes
 
 ### Problem 4: Off-Hours Scheduling
 - **Cost**: 40-50% of EC2 budget for non-production environments
@@ -167,7 +167,7 @@ Dashboard shows results
 **Analyzers (3 Production-Ready):**
 - EBSAnalyzer: Unattached volumes & old snapshots
 - EC2Analyzer: Idle instances via CloudWatch metrics
-- S3Analyzer: Incomplete multipart uploads
+- S3Analyzer: Lifecycle transitions, Intelligent-Tiering, multipart cleanup, and stale bucket delete candidates
 
 **Lambda Functions (2 Complete):**
 - analysis_handler.py: Nightly analysis (generates findings.json)
@@ -450,6 +450,40 @@ The demo includes:
 - **Sample user actions** showing realistic decision patterns
 
 Perfect for understanding the optimization workflow before production deployment.
+
+---
+
+## FAQs for Clients and Stakeholders
+
+### If AWS already has cost tools, why use this framework?
+AWS provides strong recommendation engines, but recommendations are distributed across different services and often stop at insight.
+
+This framework adds the operating layer needed to safely act on those insights:
+- One consolidated workflow for findings and actions
+- Human approval options (Keep, Remove, Notify Users)
+- Risk-aware guardrails for automation-managed resources
+- Decision tracking and auditability
+- Communication workflows before high-risk actions
+
+In short: AWS tells you what might be optimized. This framework helps teams safely decide and execute.
+
+### Is this replacing native AWS services?
+No. It complements them.
+
+AWS remains the source of telemetry and recommendations.
+This framework standardizes triage, governance, and action execution across teams and accounts.
+
+### What value does this add for enterprise teams?
+- **Governance**: explicit decision capture instead of ad-hoc cleanup
+- **Safety**: drift-aware handling for CloudFormation/Terraform/CDK-managed resources
+- **Consistency**: repeatable optimization process across environments
+- **Speed**: less context-switching across multiple AWS consoles
+- **Communication**: built-in notify path for stakeholders before removals
+
+### Why not auto-delete everything with high savings?
+Because optimization without context can cause outages, deployment failures, and infrastructure drift.
+
+This framework is intentionally designed to prioritize safe, reviewable optimization over blind automation.
 
 ---
 

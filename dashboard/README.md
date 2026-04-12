@@ -39,7 +39,7 @@ The demo includes 12 sample findings across different AWS services:
 
 - **EBS Volumes**: Unattached storage
 - **EC2 Instances**: Idle instances and over-provisioning
-- **S3 Buckets**: Lifecycle optimization opportunities
+- **S3 Buckets**: Recommendations and custom tabs for lifecycle policies, Intelligent-Tiering, multipart cleanup, and safe-delete review
 - **CloudWatch Logs**: Retention policy tuning
 - **RDS Instances**: Underutilized databases
 - **NAT Gateways**: Unused network resources

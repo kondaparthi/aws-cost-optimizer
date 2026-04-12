@@ -58,6 +58,13 @@ thresholds:
     check_incomplete_multipart: true
     multipart_age_days: 7        # Alert if upload pending >N days
     infrequent_access_days: 30   # Suggest storage class change if >N days old
+    recommend_lifecycle_policies: true
+    recommend_intelligent_tiering: true
+    recommend_unused_bucket_delete: true
+    lifecycle_min_size_gb: 100
+    intelligent_tiering_min_size_gb: 128
+    unused_bucket_days: 1095     # Only recommend delete when bucket appears unused >3 years
+    object_scan_limit: 500       # Sample up to N objects per bucket when estimating size/activity
 
   # CloudWatch Logs
   cloudwatch:

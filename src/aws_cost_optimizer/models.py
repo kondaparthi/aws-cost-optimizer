@@ -111,7 +111,7 @@ class UserAction:
     """User's decision on a finding."""
     
     id: str  # Finding ID
-    user_action: str  # keep, remove
+    user_action: str  # keep, remove, notify, schedule, resize
     user_timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     estimated_savings_monthly: float = 0.0
     estimated_savings_annual: float = 0.0
