@@ -296,13 +296,6 @@ This framework is intentionally designed to prioritize safe, reviewable optimiza
 
 ---
 
-## 🤖AI Assistance
-
-AI assistants (Claude & GitHub Copilot Chat) were used as a **productivity aid** for parts of the implementation.
-The end-to-end architecture, design integrity, and cost optimization framework reflect my hands-on experience building and optimizing AWS environments at scale.
-
----
-
 ## License
 
 MIT - Use freely in your organization
